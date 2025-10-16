@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { apiClient } from '../utils/api';
 
 interface User {
   id: string;
@@ -9,7 +10,29 @@ interface User {
   email: string;
   username: string;
   email_verified: boolean;
+  kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified';
   role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'verifier' | undefined;
+  verification_status?: 'pending' | 'submitted' | 'approved' | 'rejected';
+  verification_data?: any;
+  wallet_created?: boolean;
+  bank_account_linked?: boolean;
+  profile_completed?: boolean;
+  
+  // Add backend fields
+  verified?: boolean; // Backend uses 'verified' for email verification
+  document_verified?: boolean; // Backend field
+  trust_score?: number; // Backend field
+  nationality?: string; // Backend field
+  lga?: string; // Backend field
+  dob?: string; // Backend field
+  wallet_address?: string; // Backend field
+  avatar_url?: string; // Backend field
+  referral_code?: string; // Backend field
+  referral_count?: number; // Backend field
+  verification_type?: string; // Backend field
+  nin_number?: string; // Backend field
+  verification_number?: string; // Backend field
+  nearest_landmark?: string; // Backend field
 }
 
 interface AuthContextType {
@@ -19,11 +42,22 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
-  verifyEmail: (token: string) => Promise<void>;
+  verifyEmail: (token: string) => Promise<any>;
   resendVerification: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<User | undefined>;
   updateUserRole: (role: 'worker' | 'employer') => Promise<boolean>;
   setUserProfile: (profile: any) => void;
+  loading: boolean;
+  updateUser: (userData: Partial<User>) => void;
+  // Verification flow methods
+  startVerificationFlow: () => void;
+  completeVerificationStep: (step: string, data?: any) => void;
+  getVerificationProgress: () => VerificationProgress;
+  skipVerification: () => void;
+  submitKYC: (kycData: KYCData) => Promise<boolean>;
+  updateVerificationStatus: (status: User['verification_status']) => void;
+  checkVerificationStatus: () => Promise<boolean>;
+  getNextRequiredStep: (user: User) => string;
 }
 
 interface RegisterData {
@@ -35,279 +69,601 @@ interface RegisterData {
   referral_code?: string;
 }
 
+interface VerificationProgress {
+  currentStep: string;
+  completedSteps: string[];
+  data: any;
+  startedAt: string;
+}
+
+interface KYCData {
+  documentType: 'nin' | 'driver_license' | 'passport' | 'voter_id';
+  documentId: string;
+  documentUrl: string;
+  selfieUrl: string;
+  nationality: string;
+  dob?: string;
+  state: string;
+  lga: string;
+  nearestLandmark?: string;
+}
+
+// Verification flow steps
+export const VERIFICATION_STEPS = {
+  TERMS: 'terms',
+  DOCUMENT: 'document',
+  FACIAL: 'facial',
+  ROLE: 'role',
+  WALLET: 'wallet',
+  BANK: 'bank',
+  PROFILE: 'profile',
+  COMPLETE: 'complete'
+} as const;
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [verificationProgress, setVerificationProgress] = useState<VerificationProgress | null>(null);
   const navigate = useNavigate();
 
-  const refreshUser = async () => {
-  if (!token) return;
-  
-  try {
-    const response = await fetch('https://verinest.up.railway.app/api/users/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      } as HeadersInit,
-    });
-    
-    if (response.ok) {
-      const responseData = await response.json();
-      console.log('Full API response:', responseData);
-      
-      // Handle the actual response structure: { status: "success", data: { user: {...} } }
-      let userData;
-      if (responseData.data && responseData.data.user) {
-        userData = responseData.data.user;
-      } else {
-        userData = responseData;
-      }
-      
-      console.log('Extracted user data:', userData);
-      
-      // Normalize the field names - map 'verified' to 'email_verified'
-      const normalizedUser = {
-        ...userData,
-        email_verified: userData.verified || userData.email_verified || false
-      };
-      
-      console.log('Normalized user data:', normalizedUser);
-      setUser(normalizedUser);
-      localStorage.setItem('user', JSON.stringify(normalizedUser));
-      
-      return normalizedUser;
-    }
-  } catch (error) {
-    console.error('Error refreshing user:', error);
-  }
-};
+  // Helper function to safely get boolean values with defaults
+  const getSafeBoolean = (value: boolean | undefined | null, defaultValue: boolean = false): boolean => {
+    return value !== undefined && value !== null ? value : defaultValue;
+  };
 
+  // Initialize auth state
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    
-    if (storedToken) {
-      setToken(storedToken);
-    }
-
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-      } catch (e) {
-        console.warn('Invalid user in localStorage, clearing it');
-        localStorage.removeItem('user');
-        setUser(null);
+    const initializeAuth = async () => {
+      const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      const storedProgress = localStorage.getItem('verificationProgress');
+      
+      if (storedToken) {
+        // Set token in API client
+        apiClient.setToken(storedToken);
+        setToken(storedToken);
+        
+        // Validate token and get fresh user data
+        try {
+          const userData = await apiClient.get('/users/me');
+          console.log('Token validation successful:', userData);
+          
+          if (userData.data && userData.data.user) {
+            const normalizedUser = normalizeUserData(userData.data.user);
+            setUser(normalizedUser);
+            localStorage.setItem('user', JSON.stringify(normalizedUser));
+            
+            // Check if user needs to continue verification
+            if (storedProgress && !isVerificationComplete(normalizedUser)) {
+              try {
+                const progress = JSON.parse(storedProgress);
+                setVerificationProgress(progress);
+              } catch (e) {
+                console.warn('Invalid verification progress data');
+              }
+            }
+          } else if (storedUser) {
+            // Fallback to stored user
+            try {
+              const parsed = JSON.parse(storedUser);
+              setUser(parsed);
+            } catch (e) {
+              console.warn('Invalid user in localStorage, clearing it');
+              localStorage.removeItem('user');
+            }
+          }
+        } catch (error: any) {
+          console.error('Token validation failed:', error);
+          // Token is invalid, clear everything
+          if (error.message === 'Authentication required') {
+            handleTokenExpiration();
+          }
+        }
+      } else if (storedUser) {
+        // No token but user exists
+        try {
+          const parsed = JSON.parse(storedUser);
+          setUser(parsed);
+        } catch (e) {
+          localStorage.removeItem('user');
+        }
       }
-    }
+      
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+
+const normalizeUserData = (userData: any): User => {
+  console.log('🔄 Normalizing user data from backend:', userData);
+  
+  // Determine KYC status based on backend fields
+  let kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified' = 'unverified';
+  
+  if (userData.verification_status === 'approved' || userData.document_verified) {
+    kyc_verified = 'verified';
+  } else if (userData.verification_status === 'pending' || userData.verification_status === 'submitted') {
+    kyc_verified = 'pending';
+  } else if (userData.verification_status === 'rejected') {
+    kyc_verified = 'rejected';
+  }
+
+  return {
+    id: userData.id,
+    name: userData.name,
+    email: userData.email,
+    username: userData.username,
+    
+    // Email verification - map backend 'verified' to 'email_verified'
+    email_verified: getSafeBoolean(userData.verified, getSafeBoolean(userData.email_verified)),
+    
+    // KYC verification status
+    kyc_verified,
+    verification_status: userData.verification_status || 'pending',
+    
+    // Role
+    role: userData.role || 'user',
+    
+    // Wallet and profile status
+    wallet_created: !!userData.wallet_address,
+    bank_account_linked: getSafeBoolean(userData.bank_account_linked),
+    profile_completed: getSafeBoolean(userData.profile_completed),
+    
+    // Backend fields
+    verified: userData.verified,
+    document_verified: userData.document_verified,
+    trust_score: userData.trust_score || 0,
+    nationality: userData.nationality,
+    lga: userData.lga,
+    dob: userData.dob,
+    wallet_address: userData.wallet_address,
+    avatar_url: userData.avatar_url,
+    referral_code: userData.referral_code,
+    referral_count: userData.referral_count || 0,
+    verification_type: userData.verification_type,
+    nin_number: userData.nin_number,
+    verification_number: userData.verification_number,
+    nearest_landmark: userData.nearest_landmark,
+    
+    // Keep existing fields if provided
+    verification_data: userData.verification_data,
+  };
+};
+
+  const updateUser = (userData: Partial<User>) => {
+  setUser(prev => prev ? { ...prev, ...userData } : null);
+  if (userData) {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    localStorage.setItem('user', JSON.stringify({ ...currentUser, ...userData }));
+    }
+  };
+
+  const isVerificationComplete = (user: User): boolean => {
+    return user.email_verified && 
+           user.verification_status === 'approved' && 
+           user.role !== undefined && 
+           getSafeBoolean(user.wallet_created) && 
+           getSafeBoolean(user.bank_account_linked) && 
+           getSafeBoolean(user.profile_completed);
+  };
+
+  const handleTokenExpiration = () => {
+    apiClient.clearToken();
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('verificationProgress');
+    setToken(null);
+    setUser(null);
+    setVerificationProgress(null);
+    
+    if (!window.location.pathname.includes('/login')) {
+      toast.error('Your session has expired. Please log in again.');
+      navigate('/login');
+    }
+  };
+
+  const refreshUser = async (): Promise<User | undefined> => {
+    if (!token) return undefined;
+    
     try {
-      const response = await fetch('https://verinest.up.railway.app/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      let data: any = null;
-      try {
-        data = await response.json();
-      } catch (err) {
-        console.error('Login response is not valid JSON', err);
-      }
-
-      const token = data?.token ?? data?.data?.token;
-      const userObj = data?.user ?? data?.data?.user;
-
-      if (!response.ok) {
-        const errMsg = data?.message || data?.error || `Login failed (${response.status})`;
-        throw new Error(errMsg);
-      }
-
-      if (!token) {
-        throw new Error('Login succeeded but no token returned: ' + JSON.stringify(data));
-      }
-
-      localStorage.setItem('token', token);
-      if (userObj) {
-        localStorage.setItem('user', JSON.stringify(userObj));
-        setUser(userObj);
-      }
-      setToken(token);
+      const response = await apiClient.get('/users/me');
       
-      // Check if email is verified
-      if (!userObj?.email_verified) {
-        toast.warning('Please verify your email to access all features');
-        navigate('/verify-email');
-      } else {
-        toast.success('Login successful!');
-        navigate('/dashboard');
+      if (response.data && response.data.user) {
+        const normalizedUser = normalizeUserData(response.data.user);
+        setUser(normalizedUser);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        
+        // Clear verification progress if user is fully verified
+        if (isVerificationComplete(normalizedUser)) {
+          localStorage.removeItem('verificationProgress');
+          setVerificationProgress(null);
+        }
+        
+        return normalizedUser;
       }
+      return undefined;
     } catch (error: any) {
-      toast.error(error.message || 'Login failed');
+      console.error('Error refreshing user:', error);
+      if (error.message === 'Authentication required') {
+        handleTokenExpiration();
+      }
       throw error;
     }
   };
 
- const register = async (data: RegisterData) => {
-  try {
-    const requestData = {
-      ...data,
-      referral_code: data.referral_code?.trim() !== '' ? data.referral_code : undefined
+  const startVerificationFlow = () => {
+    const progress: VerificationProgress = {
+      currentStep: VERIFICATION_STEPS.TERMS,
+      completedSteps: [],
+      data: {},
+      startedAt: new Date().toISOString()
+    };
+    
+    setVerificationProgress(progress);
+    localStorage.setItem('verificationProgress', JSON.stringify(progress));
+    navigate('/verify/kyc');
+  };
+
+  const completeVerificationStep = (step: string, data?: any) => {
+    if (!verificationProgress) return;
+
+    const updatedProgress: VerificationProgress = {
+      ...verificationProgress,
+      currentStep: getNextStep(step),
+      completedSteps: [...new Set([...verificationProgress.completedSteps, step])],
+      data: { ...verificationProgress.data, ...data }
     };
 
-    const response = await fetch('https://verinest.up.railway.app/api/auth/register', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      } as HeadersInit,
-      body: JSON.stringify(requestData),
-    });
+    setVerificationProgress(updatedProgress);
+    localStorage.setItem('verificationProgress', JSON.stringify(updatedProgress));
 
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      throw new Error(responseData.message || 'Registration failed');
+    // Auto-navigate to next step
+    if (updatedProgress.currentStep !== VERIFICATION_STEPS.COMPLETE) {
+      navigate('/verification');
     }
+  };
 
-    // If backend returns token and user, auto-login
-    if (responseData.token && responseData.user) {
-      localStorage.setItem('token', responseData.token);
-      localStorage.setItem('user', JSON.stringify(responseData.user));
-      setToken(responseData.token);
-      setUser(responseData.user);
-      
-      // Check if email is verified
-      if (responseData.user.email_verified) {
-        toast.success('Registration successful!');
-        navigate('/dashboard');
+  const getNextStep = (currentStep: string): string => {
+    const steps = Object.values(VERIFICATION_STEPS);
+    const currentIndex = steps.indexOf(currentStep as any);
+    return currentIndex < steps.length - 1 ? steps[currentIndex + 1] : VERIFICATION_STEPS.COMPLETE;
+  };
+
+  const getVerificationProgress = (): VerificationProgress => {
+    return verificationProgress || {
+      currentStep: VERIFICATION_STEPS.TERMS,
+      completedSteps: [],
+      data: {},
+      startedAt: new Date().toISOString()
+    };
+  };
+
+  const skipVerification = () => {
+    localStorage.removeItem('verificationProgress');
+    setVerificationProgress(null);
+    navigate('/dashboard');
+    toast.info('You can complete verification later from your dashboard');
+  };
+
+  const submitKYC = async (kycData: KYCData): Promise<boolean> => {
+    try {
+      let endpoint = '';
+      let payload = {};
+
+      if (kycData.documentType === 'nin') {
+        endpoint = '/verification/nin';
+        payload = {
+          nin_number: kycData.documentId,
+          document_url: kycData.documentUrl,
+          selfie_url: kycData.selfieUrl,
+          nationality: kycData.nationality,
+          dob: kycData.dob,
+          lga: kycData.lga,
+          nearest_landmark: kycData.nearestLandmark
+        };
       } else {
-        toast.success('Registration successful! Please verify your email.');
-        navigate('/verify-email');
+        endpoint = '/verification/document';
+        payload = {
+          verification_type: kycData.documentType,
+          document_id: kycData.documentId,
+          document_url: kycData.documentUrl,
+          selfie_url: kycData.selfieUrl,
+          nationality: kycData.nationality,
+          dob: kycData.dob,
+          lga: kycData.lga,
+          nearest_landmark: kycData.nearestLandmark
+        };
+      }
+
+      const response = await apiClient.post(endpoint, payload);
+      
+      if (response.status === 'success') {
+        // Update user verification status
+        await refreshUser();
+        return true;
+      }
+      
+      return false;
+    } catch (error: any) {
+      console.error('KYC submission failed:', error);
+      toast.error(error.message || 'KYC verification failed');
+      return false;
+    }
+  };
+
+  const checkVerificationStatus = async (): Promise<boolean> => {
+    try {
+      await refreshUser();
+      return user?.kyc_verified === 'verified';
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+      return false;
+    }
+  };
+
+
+// contexts/AuthContext.tsx (Enhanced getNextRequiredStep)
+const getNextRequiredStep = (user: User): string => {
+  console.log('🔍 Determining next step for user:', user);
+  if (!user) return 'register';
+  
+  if (!user.email_verified) {
+    console.log('📧 Email not verified');
+    return 'verify-email';
+  }
+  
+  if (!user.kyc_verified || user.kyc_verified === 'unverified') {
+    console.log('🆔 KYC not verified:', user.kyc_verified);
+    return 'kyc';
+  }
+  
+  if (user.kyc_verified === 'pending') {
+    console.log('⏳ KYC pending review');
+    return 'dashboard'; // Go to dashboard if KYC is pending
+  }
+  
+  if (!user.role) {
+    console.log('🎭 No role selected');
+    return 'select-role';
+  }
+  
+  if (user.role === 'worker' && !user.profile_completed) {
+    console.log('👷 Worker profile not completed');
+    return 'worker-profile';
+  }
+  
+  console.log('✅ All steps completed, going to dashboard');
+  return 'dashboard';
+};
+
+
+  const updateVerificationStatus = (status: User['verification_status']) => {
+    setUser(prev => prev ? { ...prev, verification_status: status } : null);
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const data = await apiClient.post('/auth/login', { email, password });
+      
+      const token = data?.token ?? data?.data?.token;
+      const userObj = data?.user ?? data?.data?.user;
+
+      if (!token) {
+        throw new Error('Login succeeded but no token returned');
+      }
+
+      // Set token in API client and state
+      apiClient.setToken(token);
+      setToken(token);
+      localStorage.setItem('token', token);
+      
+      // Store user data
+      if (userObj) {
+        const normalizedUser = normalizeUserData(userObj);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        setUser(normalizedUser);
+
+        console.log('✅ Login successful, user:', normalizedUser);
+
+        // Check if user needs verification
+        const nextStep = getNextRequiredStep(normalizedUser);
+      console.log('📍 Next step:', nextStep);
+
+      switch (nextStep) {
+        case 'verify-email':
+          toast.success('Login successful! Please verify your email.');
+          navigate('/verify-email');
+          break;
+        
+        case 'kyc':
+          toast.success('Login successful! Starting verification process...');
+          startVerificationFlow();
+          break;
+        
+        case 'select-role':
+          toast.success('Login successful! Please select your role.');
+          navigate('/select-role');
+          break;
+        
+        case 'worker-profile':
+          toast.success('Login successful! Complete your worker profile.');
+          navigate('/worker/profile-setup');
+          break;
+        
+        case 'employer-dashboard':
+          toast.success('Login successful! Welcome back.');
+          navigate('/employer/dashboard');
+          break;
+        
+        default:
+          toast.success('Login successful!');
+          navigate('/dashboard');
       }
     } else {
-      // If no token returned, go to login
-      toast.success('Registration successful! Please login.');
-      navigate('/login');
+      // Fallback if no user object
+      toast.success('Login successful!');
+      navigate('/dashboard');
     }
   } catch (error: any) {
-    toast.error(error.message || 'Registration failed');
+    console.error('❌ Login failed:', error);
+    toast.error(error.message || 'Login failed');
     throw error;
   }
 };
 
- const verifyEmail = async (verificationToken: string) => {
-  try {
-    const response = await fetch(`https://verinest.up.railway.app/api/auth/verify?token=${verificationToken}`);
+  const register = async (data: RegisterData) => {
+    try {
+      const requestData = {
+        ...data,
+        referral_code: data.referral_code?.trim() !== '' ? data.referral_code : undefined
+      };
+
+      const responseData = await apiClient.post('/auth/register', requestData);
+
+      // Auto-login if token is returned
+      if (responseData.token && responseData.user) {
+        apiClient.setToken(responseData.token);
+        setToken(responseData.token);
+        localStorage.setItem('token', responseData.token);
+        
+        const normalizedUser = normalizeUserData(responseData.user);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        setUser(normalizedUser);
+        
+        // Start verification flow for new users
+        if (getSafeBoolean(normalizedUser.email_verified)) {
+          toast.success('Registration successful! Starting verification...');
+          startVerificationFlow();
+        } else {
+          toast.success('Registration successful! Please verify your email first.');
+          navigate('/verify-email');
+        }
+      } else {
+        // Manual login required
+        toast.success('Registration successful! Please login.');
+        navigate('/login');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Registration failed');
+      throw error;
+    }
+  };
+
+  const verifyEmail = async (verificationToken: string): Promise<any> => {
+    try {
+      const data = await apiClient.get(`/auth/verify?token=${verificationToken}`);
+      
+      // Update auth state if token is returned
+      if (data.token) {
+        apiClient.setToken(data.token);
+        setToken(data.token);
+        localStorage.setItem('token', data.token);
+      }
+      
+      // Update user data
+      if (data.user) {
+        const normalizedUser = normalizeUserData(data.user);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        setUser(normalizedUser);
+        
+        // Start verification flow after email verification
+        toast.success('Email verified! Starting verification process...');
+        startVerificationFlow();
+      } else {
+        await refreshUser();
+      }
+
+      return data;
+    } catch (error: any) {
+      throw new Error(error.message || 'Email verification failed');
+    }
+  };
+
+  const resendVerification = async () => {
+    if (!user) throw new Error('No user logged in');
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Email verification failed');
+    try {
+      await apiClient.post('/auth/resend-verification', { email: user.email });
+      toast.success('Verification email sent!');
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to resend verification email');
     }
+  };
 
-    const data = await response.json();
-    
-    // If we have a token in response, update the auth state
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      setToken(data.token);
+  const updateUserRole = async (role: 'worker' | 'employer') => {
+    try {
+      const data = await apiClient.put('/users/role', { role });
+      
+      if (data.user) {
+        const normalizedUser = normalizeUserData(data.user);
+        setUser(normalizedUser);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        
+        // Mark role step as complete in verification progress
+        if (verificationProgress) {
+          completeVerificationStep(VERIFICATION_STEPS.ROLE, { role });
+        }
+        
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error('Failed to update role:', error);
+      if (error.message === 'Authentication required') {
+        handleTokenExpiration();
+      }
+      return false;
     }
-    
-    // If we have user data, update it
-    if (data.user) {
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setUser(data.user);
-    } else {
-      // Refresh user data to get updated verification status
-      await refreshUser();
-    }
+  };
 
-    return data;
-  } catch (error: any) {
-    throw new Error(error.message || 'Email verification failed');
-  }
-};
-
-// Add the resendVerification function if not already there
-const resendVerification = async () => {
-  if (!user) throw new Error('No user logged in');
-  
-  try {
-    const response = await fetch('https://verinest.up.railway.app/api/auth/resend-verification', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` })
-      } as HeadersInit,
-      body: JSON.stringify({ email: user.email }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to resend verification email');
-    }
-
-    return await response.json();
-  } catch (error: any) {
-    throw new Error(error.message || 'Failed to resend verification');
-  }
-};
-
-const updateUserRole = async (role: 'worker' | 'employer') => {
-  try {
-    const response = await fetch('https://verinest.up.railway.app/api/users/role', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ role }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setUser(data.user);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('Failed to update role:', error);
-    return false;
-  }
-};
-
-const setUserProfile = (profile: any) => {
-  setUser(prev => prev ? { ...prev, profile } : null);
-};
+  const setUserProfile = (profile: any) => {
+    setUser(prev => prev ? { ...prev, ...profile } : null);
+  };
 
   const logout = () => {
+    apiClient.clearToken();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('verificationProgress');
     setToken(null);
     setUser(null);
+    setVerificationProgress(null);
     toast.success('Logged out successfully');
     navigate('/');
   };
 
+  const value: AuthContextType = {
+    user,
+    token,
+    login,
+    register,
+    logout,
+    isAuthenticated: !!token && !!user,
+    verifyEmail,
+    resendVerification,
+    refreshUser,
+    updateUserRole,
+    setUserProfile,
+    loading,
+    updateUser,
+    // Verification flow methods
+    startVerificationFlow,
+    completeVerificationStep,
+    getVerificationProgress,
+    skipVerification,
+    submitKYC,
+    updateVerificationStatus,
+    checkVerificationStatus,
+    getNextRequiredStep,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        login,
-        register,
-        logout,
-        isAuthenticated: !!token,
-        verifyEmail,
-        resendVerification,
-        refreshUser,
-        updateUserRole,
-        setUserProfile
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -320,3 +676,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+// Export verification steps for use in components

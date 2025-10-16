@@ -4,139 +4,233 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Briefcase, UserPlus, ArrowRight } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { Briefcase, UserPlus, CheckCircle, Star, Shield, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
-export const RoleSelection = () => {
-  const { user, updateUserRole } = useAuth();
+interface RoleSelectionProps {
+  onSelect?: (role: 'worker' | 'employer') => void;
+  selectedRole?: 'worker' | 'employer' | '';
+}
+
+export const RoleSelection = ({ onSelect, selectedRole }: RoleSelectionProps) => {
+  const { token, updateUser, user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
   const handleRoleSelect = async (role: 'worker' | 'employer') => {
+
+    // Check if user has completed KYC verification
+  if (!user?.kyc_verified || user.kyc_verified === 'unverified') {
+    toast.error('Please complete identity verification first');
+    navigate('/verify/kyc');
+    return;
+  }
+
+  // Check if KYC is still pending
+  if (user.kyc_verified === 'pending') {
+    toast.info('Your identity verification is under review. Please wait for approval before selecting a role.');
+    return;
+  }
+
     setLoading(true);
     try {
-      const success = await updateUserRole(role);
-      if (success) {
-        toast.success(`Welcome as ${role === 'worker' ? 'a Worker' : 'an Employer'}!`);
-        
-        if (role === 'worker') {
-          navigate('/worker/profile-setup');
+      // Convert to backend expected format (capital first letter)
+      const backendRole = role === 'worker' ? 'Worker' : 'Employer';
+
+      // Use the correct endpoint with the exact request body format
+      const response = await fetch('https://verinest.up.railway.app/api/users/role/upgrade', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target_user_id: user?.id, // Must be current user's ID
+          new_role: backendRole // 'Worker' or 'Employer' (with capital first letter)
+        }),
+      });
+
+      if (response.ok) {
+        // Update local user context
+        if (updateUser) {
+          const userResponse = await fetch('https://verinest.up.railway.app/api/users/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            updateUser(userData);
+          }
+        }
+
+        // If onSelect prop is provided, use it
+        if (onSelect) {
+          onSelect(role);
         } else {
-          navigate('/dashboard');
+          // Default behavior if no onSelect provided
+          toast.success(`You're now a ${role}!`);
+          if (role === 'worker') {
+            navigate('/worker/profile-setup');
+          } else {
+            navigate('/employer/dashboard');
+          }
         }
       } else {
-        throw new Error('Failed to set role');
+        // Handle error response
+        let errorMessage = `Failed to update role: ${response.status}`;
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        } catch {
+          // Ignore if we can't read the error text
+        }
+        throw new Error(errorMessage);
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to set role');
+    } catch (error) {
+      console.error('Error updating role:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update role. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const roles = [
+    {
+      id: 'worker',
+      title: 'Worker',
+      description: 'Find jobs and get hired',
+      icon: <Briefcase className="h-8 w-8" />,
+      features: [
+        'Browse available jobs',
+        'Set your rates and availability',
+        'Build your professional profile',
+        'Get paid securely through escrow',
+        'Receive reviews and build reputation'
+      ],
+      badge: 'Earn Money',
+      color: 'blue'
+    },
+    {
+      id: 'employer',
+      title: 'Employer',
+      description: 'Post jobs and hire talent',
+      icon: <UserPlus className="h-8 w-8" />,
+      features: [
+        'Post job listings',
+        'Browse skilled workers',
+        'Secure escrow payments',
+        'Track job progress',
+        'Leave reviews for workers'
+      ],
+      badge: 'Hire Talent',
+      color: 'green'
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">Welcome to VeriNest! 🎉</h1>
-          <p className="text-xl text-muted-foreground">
-            How would you like to use our platform?
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Worker Card */}
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
-                <Briefcase className="h-8 w-8 text-blue-600" />
-              </div>
-              <CardTitle className="text-2xl">Join as Worker</CardTitle>
-              <CardDescription className="text-lg">
-                Find jobs, build your profile, and get hired
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-left space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Create multiple job profiles</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Apply for jobs in your field</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Get paid securely through escrow</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Build your reputation with reviews</span>
-                </div>
-              </div>
-              
-              <Button 
-                onClick={() => handleRoleSelect('worker')}
-                disabled={loading}
-                className="w-full group-hover:bg-blue-600"
-                size="lg"
-              >
-                Become a Worker
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Employer Card */}
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-green-200 transition-colors">
-                <UserPlus className="h-8 w-8 text-green-600" />
-              </div>
-              <CardTitle className="text-2xl">Hire as Employer</CardTitle>
-              <CardDescription className="text-lg">
-                Post jobs, find talent, and manage projects
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-left space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Post jobs for free</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Find qualified workers</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Secure payments with escrow</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Manage multiple projects</span>
-                </div>
-              </div>
-              
-              <Button 
-                onClick={() => handleRoleSelect('employer')}
-                disabled={loading}
-                variant="outline"
-                className="w-full group-hover:border-green-600 group-hover:text-green-600"
-                size="lg"
-              >
-                Start Hiring
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="text-center mt-8 text-muted-foreground">
-          <p>You can always change your role later in settings</p>
-        </div>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h3 className="text-xl font-semibold">Choose Your Path</h3>
+        <p className="text-muted-foreground">
+          Select how you want to use VeriNest. You can change this later.
+        </p>
       </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {roles.map((role) => (
+          <Card 
+            key={role.id}
+            className={`relative cursor-pointer transition-all hover:shadow-lg ${
+              selectedRole === role.id ? 'ring-2 ring-primary' : ''
+            }`}
+            onClick={() => handleRoleSelect(role.id as 'worker' | 'employer')}
+          >
+            {selectedRole === role.id && (
+              <div className="absolute top-4 right-4">
+                <CheckCircle className="h-6 w-6 text-primary" />
+              </div>
+            )}
+            
+            <CardHeader className="text-center pb-4">
+              <div className={`mx-auto h-16 w-16 rounded-full ${
+                role.color === 'blue' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
+              } flex items-center justify-center mb-4`}>
+                {role.icon}
+              </div>
+              <CardTitle className="flex items-center justify-center gap-2">
+                {role.title}
+                <Badge variant={role.color === 'blue' ? 'default' : 'secondary'}>
+                  {role.badge}
+                </Badge>
+              </CardTitle>
+              <CardDescription>{role.description}</CardDescription>
+            </CardHeader>
+            
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {role.features.map((feature, index) => (
+                  <div key={index} className="flex items-center gap-3 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <span>{feature}</span>
+                  </div>
+                ))}
+              </div>
+              
+              <Button 
+                className="w-full" 
+                variant={selectedRole === role.id ? "default" : "outline"}
+                disabled={loading}
+              >
+                {loading ? 'Selecting...' : `Become ${role.title}`}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Benefits Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-center">Why Verify with VeriNest?</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="text-center space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Shield className="h-6 w-6 text-blue-600" />
+              </div>
+              <h4 className="font-semibold">Secure Platform</h4>
+              <p className="text-sm text-muted-foreground">
+                Your data is protected with bank-level security and encryption
+              </p>
+            </div>
+            
+            <div className="text-center space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                <Star className="h-6 w-6 text-green-600" />
+              </div>
+              <h4 className="font-semibold">Trusted Community</h4>
+              <p className="text-sm text-muted-foreground">
+                Join verified professionals and build your reputation
+              </p>
+            </div>
+            
+            <div className="text-center space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+                <Clock className="h-6 w-6 text-purple-600" />
+              </div>
+              <h4 className="font-semibold">Quick Process</h4>
+              <p className="text-sm text-muted-foreground">
+                Complete verification in minutes and start immediately
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

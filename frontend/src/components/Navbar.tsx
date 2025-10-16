@@ -5,6 +5,7 @@ import { Menu, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/verinest.png';
+import { NotificationCenter } from './NotificationCenter';
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -40,6 +41,7 @@ export const Navbar = () => {
               </>
             ) : (
               <div className="flex items-center space-x-4">
+                <NotificationCenter />
                 <Link to="/dashboard" className="text-foreground hover:text-primary transition-colors">
                   Dashboard
                 </Link>
@@ -48,6 +50,19 @@ export const Navbar = () => {
                   {user?.role && (
                     <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs capitalize">
                       {user.role}
+                    </span>
+                  )}
+
+                  {user?.kyc_verified && (
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      user.kyc_verified === 'verified' 
+                        ? 'bg-green-100 text-green-800' 
+                        : user.kyc_verified === 'pending'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {user.kyc_verified === 'verified' ? 'Verified' : 
+                      user.kyc_verified === 'pending' ? 'Verification Pending' : 'Verification Required'}
                     </span>
                   )}
                 </div>

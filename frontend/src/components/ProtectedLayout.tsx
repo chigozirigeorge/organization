@@ -7,7 +7,7 @@ interface ProtectedLayoutProps {
 }
 
 export const ProtectedLayout = ({ children }: ProtectedLayoutProps) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, refreshUser } = useAuth();
 
   // Show loading state while checking authentication
   if (!isAuthenticated) {
