@@ -19,8 +19,12 @@ import { JobProgress } from '../components/JobProgress';
 import { JobReviews } from '../components/JobReviews';
 import { DisputeManagement } from '../components/DisputeManagement';
 import { EscrowManagement } from '../components/EscrowManagement';
-import { AlertCircle, Briefcase, UserPlus, Wallet, Home, Settings, FileText, TrendingUp, Users, Star, Shield, CreditCard } from 'lucide-react';
+import { AlertCircle, Briefcase, UserPlus, Wallet, Home, Settings, FileText, TrendingUp, Users, Star, Shield, CreditCard, SettingsIcon } from 'lucide-react';
 import { RoleSelection } from '@/components/RoleSelection';
+import { VerificationPrompt } from '@/components/VerificationPrompt';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Settings as Setting } from '@/components/Settings';
 
 const Dashboard = () => {
   const { user, token, logout, isAuthenticated, refreshUser } = useAuth();
@@ -47,6 +51,12 @@ const Dashboard = () => {
   if (user && !user.role) {
     return <RoleSelection />;
   }
+
+  // Add a function to manually refresh KYC status
+  const checkKYCStatus = async () => {
+    await refreshUser();
+    toast.info('KYC status updated');
+  };
 
   const fetchDashboardStats = async () => {
     try {
@@ -107,6 +117,8 @@ const Dashboard = () => {
         return <DisputeManagement />;
       case 'escrow':
         return <EscrowManagement />;
+      case 'settings':
+        return <Setting />;
       default:
         return <JobsList />;
     }
@@ -185,6 +197,15 @@ const Dashboard = () => {
                   <FileText className="h-4 w-4 mr-2" />
                   Contracts
                 </Button>
+
+                <Button
+                    variant={activeSection === 'settings' ? 'default' : 'outline'}
+                    className="w-full justify-start"
+                    onClick={() => setActiveSection('settings')}
+                  >
+                    <SettingsIcon className="h-4 w-4 mr-2" />
+                    Settings
+                  </Button>
               </CardContent>
             </Card>
 
@@ -341,6 +362,89 @@ const Dashboard = () => {
                     variant="link" 
                     className="text-yellow-800 p-0 ml-1 h-auto" 
                     onClick={() => navigate('/verify-email')}
+                  >
+                    Verify now
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Identity Verification Status
+                    <Button variant="outline" size="sm" onClick={checkKYCStatus}>
+                      Refresh Status
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <span>Current Status:</span>
+                        <Badge 
+                          variant={
+                            user?.kyc_verified === 'verified' ? 'default' :
+                            user?.kyc_verified === 'pending' ? 'secondary' :
+                            user?.kyc_verified === 'rejected' ? 'destructive' :
+                            'destructive'
+                          }
+                          className="ml-2"
+                        >
+                          {user?.kyc_verified === 'verified' ? 'Verified' :
+                          user?.kyc_verified === 'pending' ? 'Under Review' :
+                          user?.kyc_verified === 'rejected' ? 'Rejected' :
+                          'Not Verified'}
+                        </Badge>
+                      </div>
+                      
+                      {/* Show backend verification status for debugging */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Backend Status: {user?.verification_status || 'unknown'} | 
+                          Document Verified: {user?.document_verified ? 'Yes' : 'No'}
+                        </div>
+                      )}
+                      
+                      {user?.kyc_verified === 'pending' && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Verification typically takes 24-48 hours
+                        </p>
+                      )}
+                      
+                      {user?.kyc_verified === 'rejected' && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Your verification was rejected. Please submit new documents.
+                        </p>
+                      )}
+                    </div>
+                    
+                    {(user?.kyc_verified === 'unverified' || user?.kyc_verified === 'rejected') && (
+                      <Button onClick={() => navigate('/verify/kyc')}>
+                        {user?.kyc_verified === 'rejected' ? 'Resubmit Verification' : 'Start Verification'}
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              {/* KYC Verification Prompt */}
+            {(!user?.kyc_verified || user.kyc_verified === 'unverified') && (
+              <div className="mb-6">
+                <VerificationPrompt />
+              </div>
+            )}
+
+            {/* Limited Access Notice for Unverified Users */}
+            {(!user?.kyc_verified || user.kyc_verified === 'unverified') && user.role && (
+              <Alert className="mb-6 bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Limited Access:</strong> Complete verification to access all features. 
+                  <Button 
+                    variant="link" 
+                    className="text-blue-800 p-0 ml-1 h-auto" 
+                    onClick={() => navigate('/verify/kyc')}
                   >
                     Verify now
                   </Button>

@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Wallet, Plus, ArrowUp, ArrowDown, Send, History, CreditCard, Building, User, Calendar, RefreshCw } from 'lucide-react';
+import { Wallet, Plus, ArrowUp, ArrowDown, Send, History, CreditCard, Building, User, Calendar, RefreshCw, Shield, Star, TrendingUp, Award } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface WalletData {
   id: string;
@@ -55,7 +56,7 @@ export const WalletManagement = () => {
   // Form states
   const [depositData, setDepositData] = useState({
     amount: '',
-    payment_method: 'Card' as 'Card' | 'BankTransfer' | 'USSD', // Must match Rust enum
+    payment_method: 'Card' as 'Card' | 'BankTransfer' | 'USSD',
     description: 'Wallet deposit'
   });
 
@@ -110,8 +111,9 @@ export const WalletManagement = () => {
     }
   }, [walletData?.wallet_created, token]);
 
+  const navigate = useNavigate();
 
- const checkWalletStatus = async () => {
+  const checkWalletStatus = async () => {
     setFetching(true);
     try {
       console.log('🔄 Checking wallet status...');
@@ -137,7 +139,6 @@ export const WalletManagement = () => {
           };
           setWalletData(newWalletData);
           
-          // Fetch bank accounts and transactions when wallet is found
           await fetchBankAccounts();
           await fetchTransactions();
         } else {
@@ -181,47 +182,6 @@ export const WalletManagement = () => {
     }
   };
 
-  const tryUserEndpointFallback = async () => {
-    try {
-      const userResponse = await fetch('https://verinest.up.railway.app/api/users/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } as HeadersInit,
-      });
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        console.log('User data for wallet fallback:', userData);
-        
-        // Check if wallet info exists in user data
-        if (userData.wallet_id || userData.balance !== undefined) {
-          setWalletData({
-            id: userData.wallet_id || '',
-            balance: userData.balance || 0,
-            currency: 'NGN',
-            wallet_created: true
-          });
-        } else {
-          setWalletData({
-            id: '',
-            balance: 0,
-            currency: 'NGN',
-            wallet_created: false
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Fallback also failed:', error);
-      setWalletData({
-        id: '',
-        balance: 0,
-        currency: 'NGN',
-        wallet_created: false
-      });
-    }
-  };
-
   const fetchBankAccounts = async () => {
     try {
       console.log('🔄 Fetching bank accounts...');
@@ -239,7 +199,6 @@ export const WalletManagement = () => {
         const data = await response.json();
         console.log('✅ Bank accounts data:', data);
         
-        // Handle different response structures
         let accountsData = [];
         
         if (data.data && Array.isArray(data.data)) {
@@ -266,150 +225,201 @@ export const WalletManagement = () => {
     }
   };
 
-////////////
-  // components/WalletManagement.tsx - Fix transactions fetching
-const fetchTransactions = async () => {
-  try {
-    console.log('🔄 Fetching transactions...');
-    
-    const response = await fetch('https://verinest.up.railway.app/api/wallet/transactions', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      } as HeadersInit,
-    });
+  const fetchTransactions = async () => {
+    try {
+      console.log('🔄 Fetching transactions...');
+      
+      const response = await fetch('https://verinest.up.railway.app/api/wallet/transactions', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        } as HeadersInit,
+      });
 
-    console.log('Transactions response status:', response.status);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ Transactions data received:', data);
+      console.log('Transactions response status:', response.status);
       
-      // Handle different response structures
-      let transactionsData = [];
-      
-      if (data.data && Array.isArray(data.data)) {
-        transactionsData = data.data;
-      } else if (Array.isArray(data.transactions)) {
-        transactionsData = data.transactions;
-      } else if (Array.isArray(data)) {
-        transactionsData = data;
-      } else if (data.data && data.data.transactions) {
-        transactionsData = data.data.transactions;
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Transactions data received:', data);
+        
+        let transactionsData = [];
+        
+        if (data.data && Array.isArray(data.data)) {
+          transactionsData = data.data;
+        } else if (Array.isArray(data.transactions)) {
+          transactionsData = data.transactions;
+        } else if (Array.isArray(data)) {
+          transactionsData = data;
+        } else if (data.data && data.data.transactions) {
+          transactionsData = data.data.transactions;
+        } else {
+          console.warn('⚠️ Unexpected transactions response structure:', data);
+          transactionsData = [];
+        }
+        
+        const uniqueTransactions = new Map();
+        
+        transactionsData.forEach((tx: any) => {
+          const txId = tx.id || tx.transaction_id || tx.reference || `tx_${Date.now()}_${Math.random()}`;
+          
+          if (!uniqueTransactions.has(txId)) {
+            uniqueTransactions.set(txId, {
+              id: txId,
+              reference: tx.reference || tx.id || `ref_${txId}`,
+              amount: parseFloat(tx.amount) || 0,
+              type: mapTransactionType(tx.type || tx.transaction_type || tx.transactionType),
+              status: mapTransactionStatus(tx.status || tx.transaction_status),
+              description: tx.description || tx.narration || tx.purpose || 'Transaction',
+              created_at: tx.created_at || tx.createdAt || tx.date || new Date().toISOString(),
+              metadata: tx.metadata || {}
+            });
+          }
+        });
+        
+        const transformedTransactions = Array.from(uniqueTransactions.values());
+        
+        transformedTransactions.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        console.log('📊 Unique transformed transactions:', transformedTransactions);
+        setTransactions(transformedTransactions);
+        
+      } else if (response.status === 500) {
+        console.error('❌ Server error (500) fetching transactions');
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
+        
+        if (errorText.includes('transaction_type')) {
+          console.log('🔧 Detected schema mismatch, using fallback data');
+          await useFallbackTransactions();
+        } else {
+          setTransactions([]);
+          toast.error('Temporarily unable to load transactions');
+        }
+        
       } else {
-        console.warn('⚠️ Unexpected transactions response structure:', data);
+        console.error(`❌ Transactions API error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
+        setTransactions([]);
       }
+    } catch (error) {
+      console.error('❌ Network error fetching transactions:', error);
+      setTransactions([]);
+    }
+  };
+
+  const mapTransactionType = (type: any): 'deposit' | 'withdrawal' | 'transfer' => {
+    if (!type) return 'transfer';
+    
+    const typeString = String(type).toLowerCase().trim();
+    
+    if (typeString.includes('deposit') || typeString.includes('credit')) return 'deposit';
+    if (typeString.includes('withdraw') || typeString.includes('debit')) return 'withdrawal';
+    
+    return 'transfer';
+  };
+
+  const mapTransactionStatus = (status: any): 'pending' | 'success' | 'failed' => {
+    if (!status) return 'pending';
+    
+    const statusString = String(status).toLowerCase().trim();
+    
+    if (statusString.includes('success') || statusString.includes('completed') || statusString.includes('approved')) 
+      return 'success';
+    if (statusString.includes('fail') || statusString.includes('error') || statusString.includes('rejected')) 
+      return 'failed';
+    
+    return 'pending';
+  };
+
+  const useFallbackTransactions = async () => {
+    try {
+      console.log('🔄 Trying fallback transactions approach...');
       
-      // FIX: Transform the data to match our frontend interface
-      const transformedTransactions = transactionsData.map((tx: any) => ({
-        id: tx.id || tx.transaction_id || tx.reference,
-        reference: tx.reference || tx.id || `tx_${Date.now()}`,
-        amount: tx.amount || 0,
-        // FIX: Handle different field names for transaction type
-        type: (tx.type || tx.transaction_type || tx.transactionType || 'other').toLowerCase(),
-        // FIX: Handle different field names for status
-        status: (tx.status || tx.transaction_status || 'pending').toLowerCase(),
-        description: tx.description || tx.narration || tx.purpose || 'Transaction',
-        created_at: tx.created_at || tx.createdAt || tx.date || new Date().toISOString(),
-        metadata: tx.metadata || {}
-      }));
-      
-      console.log('📊 Transformed transactions:', transformedTransactions);
-      setTransactions(transformedTransactions);
-      
-    } else if (response.status === 500) {
-      console.error('❌ Server error (500) fetching transactions');
-      const errorText = await response.text();
-      console.error('Error details:', errorText);
-      
-      // Check if it's the specific schema error
-      if (errorText.includes('transaction_type')) {
-        console.log('🔧 Detected schema mismatch, using fallback data');
-        await useFallbackTransactions();
+      const walletResponse = await fetch('https://verinest.up.railway.app/api/wallet', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        } as HeadersInit,
+      });
+
+      if (walletResponse.ok) {
+        const walletData = await walletResponse.json();
+        console.log('✅ Using wallet data for fallback transactions');
+        
+        const fallbackTransactions: Transaction[] = [];
+        
+        if (walletData.data?.balance > 0) {
+          fallbackTransactions.push({
+            id: 'fallback_1',
+            reference: 'current_balance',
+            amount: walletData.data.balance,
+            type: 'deposit',
+            status: 'success',
+            description: 'Current wallet balance',
+            created_at: new Date().toISOString(),
+            metadata: { isFallback: true }
+          });
+        }
+        
+        setTransactions(fallbackTransactions);
+        toast.info('Using simplified transaction view');
       } else {
         setTransactions([]);
-        toast.error('Temporarily unable to load transactions');
       }
-      
-    } else {
-      console.error(`❌ Transactions API error: ${response.status}`);
-      const errorText = await response.text();
-      console.error('Error details:', errorText);
+    } catch (error) {
+      console.error('❌ Fallback also failed:', error);
       setTransactions([]);
     }
-  } catch (error) {
-    console.error('❌ Network error fetching transactions:', error);
-    setTransactions([]);
-  }
-};
+  };
 
-// Fallback function when the main endpoint has schema issues
-const useFallbackTransactions = async () => {
-  try {
-    console.log('🔄 Trying fallback transactions approach...');
+  const TransactionList = ({ transactions }: { transactions: Transaction[] }) => {
+    const uniqueTransactions = Array.from(
+      new Map(transactions.map(tx => [tx.id, tx])).values()
+    );
     
-    // Try to get transactions from a different endpoint or use wallet data
-    const walletResponse = await fetch('https://verinest.up.railway.app/api/wallet', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      } as HeadersInit,
-    });
+    return (
+      <div className="space-y-4">
+        {uniqueTransactions.map((transaction) => (
+          <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              {getTypeIcon(transaction.type)}
+              <div>
+                <p className="font-medium capitalize">
+                  {transaction.type}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {transaction.description}
+                </p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {formatDate(transaction.created_at)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ref: {transaction.reference}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`font-medium ${
+                transaction.type === 'deposit' ? 'text-green-600' : 
+                transaction.type === 'withdrawal' ? 'text-red-600' : 
+                'text-blue-600'
+              }`}>
+                {transaction.type === 'deposit' ? '+' : '-'}
+                {formatCurrency(transaction.amount)}
+              </p>
+              {getStatusBadge(transaction.status)}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
-    if (walletResponse.ok) {
-      const walletData = await walletResponse.json();
-      console.log('✅ Using wallet data for fallback transactions');
-      
-      // Create a simple transaction from wallet balance
-      const fallbackTransactions: Transaction[] = [];
-      
-      if (walletData.data?.balance > 0) {
-        fallbackTransactions.push({
-          id: 'fallback_1',
-          reference: 'current_balance',
-          amount: walletData.data.balance,
-          type: 'deposit',
-          status: 'success',
-          description: 'Current wallet balance',
-          created_at: new Date().toISOString(),
-          metadata: { isFallback: true }
-        });
-      }
-      
-      setTransactions(fallbackTransactions);
-      toast.info('Using simplified transaction view');
-    } else {
-      setTransactions([]);
-    }
-  } catch (error) {
-    console.error('❌ Fallback also failed:', error);
-    setTransactions([]);
-  }
-};
-
-// FIX: Update the transaction display to handle the schema differences
-const getTransactionType = (transaction: Transaction) => {
-  // Handle different possible type values
-  const type = transaction.type?.toLowerCase() || 'other';
-  
-  if (type.includes('deposit') || type.includes('credit')) return 'deposit';
-  if (type.includes('withdraw') || type.includes('debit')) return 'withdrawal';
-  if (type.includes('transfer')) return 'transfer';
-  
-  return type as any;
-};
-
-const getTransactionStatus = (transaction: Transaction) => {
-  const status = transaction.status?.toLowerCase() || 'pending';
-  
-  if (status.includes('success') || status.includes('completed')) return 'success';
-  if (status.includes('fail') || status.includes('error')) return 'failed';
-  
-  return status as any;
-};
-
-///////////
-const createWallet = async () => {
+  const createWallet = async () => {
     setLoading(true);
     try {
       console.log('🔄 Creating wallet...');
@@ -445,7 +455,6 @@ const createWallet = async () => {
           };
           setWalletData(newWalletData);
           
-          // Fetch bank accounts and transactions after wallet creation
           await fetchBankAccounts();
           await fetchTransactions();
         } else {
@@ -473,117 +482,105 @@ const createWallet = async () => {
     }
   };
 
-  // components/WalletManagement.tsx - Update deposit handler
-const handleDeposit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setDepositError('');
-  
-  try {
-    // Validate amount
-    const depositAmount = parseFloat(depositData.amount);
+  const handleDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setDepositError('');
     
-    if (isNaN(depositAmount) || depositAmount < 100) {
-      toast.error('Please enter a valid amount (minimum ₦100)');
-      return;
-    }
-
-    if (depositAmount > 10000000) {
-      toast.error('Maximum deposit amount is ₦10,000,000');
-      return;
-    }
-
-    // Prepare the exact request structure that matches DepositRequestDto
-    const requestBody = {
-      amount: depositAmount,
-      payment_method: depositData.payment_method,
-      description: depositData.description,
-      metadata: {
-        source: "web_app",
-        user_id: user?.id,
-        user_email: user?.email,
-        timestamp: new Date().toISOString(),
-        redirect_url: `${window.location.origin}/payment/verify` // Add redirect URL
-      }
-    };
-
-    console.log('Sending deposit request:', requestBody);
-////
-   const response = await fetch('https://verinest.up.railway.app/api/wallet/deposit', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    const responseData = await response.json();
-
-    if (response.ok) {
-      const paymentData = responseData.data || responseData;
+    try {
+      const depositAmount = parseFloat(depositData.amount);
       
-      if (paymentData.payment_url) {
-        // Store reference for potential fallback polling
-        localStorage.setItem('pending_payment_reference', paymentData.reference);
+      if (isNaN(depositAmount) || depositAmount < 100) {
+        toast.error('Please enter a valid amount (minimum ₦100)');
+        return;
+      }
+
+      if (depositAmount > 10000000) {
+        toast.error('Maximum deposit amount is ₦10,000,000');
+        return;
+      }
+
+      const requestBody = {
+        amount: depositAmount,
+        payment_method: depositData.payment_method,
+        description: depositData.description,
+        metadata: {
+          source: "web_app",
+          user_id: user?.id,
+          user_email: user?.email,
+          timestamp: new Date().toISOString(),
+          redirect_url: `${window.location.origin}/payment/verify`
+        }
+      };
+
+      console.log('Sending deposit request:', requestBody);
+
+      const response = await fetch('https://verinest.up.railway.app/api/wallet/deposit', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        const paymentData = responseData.data || responseData;
         
-        // Open Paystack in new tab
-        const paystackWindow = window.open(
-          paymentData.payment_url,
-          'paystack_payment',
-          'width=600,height=700'
-        );
-        
-        if (paystackWindow) {
-          toast.success('Payment window opened. You can close this tab - we\'ll notify you when payment is confirmed.');
+        if (paymentData.payment_url) {
+          localStorage.setItem('pending_payment_reference', paymentData.reference);
           
-          // Start gentle polling as fallback (webhook should handle it)
-          startFallbackPolling(paymentData.reference);
+          const paystackWindow = window.open(
+            paymentData.payment_url,
+            'paystack_payment',
+            'width=600,height=700'
+          );
+          
+          if (paystackWindow) {
+            toast.success('Payment window opened. You can close this tab - we\'ll notify you when payment is confirmed.');
+            startFallbackPolling(paymentData.reference);
+          }
         }
       }
+    } catch (error: any) {
+      console.error('Deposit failed:', error);
+      const errorMessage = error.message || 'Deposit failed. Please try again.';
+      setDepositError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
-////
-  } catch (error: any) {
-    console.error('Deposit failed:', error);
-    const errorMessage = error.message || 'Deposit failed. Please try again.';
-    setDepositError(errorMessage);
-    toast.error(errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-const startFallbackPolling = (reference: string) => {
-  // Only poll as backup - webhooks should handle the confirmation
-  const pollInterval = setInterval(async () => {
-    try {
-      await checkWalletStatus(); // Just refresh wallet data
-      
-      // Check if we should stop polling (user might have manually refreshed)
-      const stillPending = localStorage.getItem('pending_payment_reference');
-      if (!stillPending || stillPending !== reference) {
-        clearInterval(pollInterval);
+  const startFallbackPolling = (reference: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        await checkWalletStatus();
+        
+        const stillPending = localStorage.getItem('pending_payment_reference');
+        if (!stillPending || stillPending !== reference) {
+          clearInterval(pollInterval);
+        }
+      } catch (error) {
+        console.error('Fallback polling error:', error);
       }
-    } catch (error) {
-      console.error('Fallback polling error:', error);
-    }
-  }, 10000); // Poll every 10 seconds
+    }, 10000);
 
-  // Stop after 5 minutes (webhook should have worked by then)
-  setTimeout(() => {
-    clearInterval(pollInterval);
-    localStorage.removeItem('pending_payment_reference');
-  }, 300000);
-};
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      localStorage.removeItem('pending_payment_reference');
+    }, 300000);
+  };
 
-  /////////
   const testDepositWithExactFormat = async () => {
     setLoading(true);
     try {
       const testData = {
-        amount: 1000.0, // ₦1000 exactly as f64
-        payment_method: "Card", // Exact enum value
-        description: "Test wallet deposit", // Required description
+        amount: 1000.0,
+        payment_method: "Card",
+        description: "Test wallet deposit",
         metadata: {
           source: "web_app_test",
           timestamp: new Date().toISOString()
@@ -619,7 +616,6 @@ const startFallbackPolling = (reference: string) => {
         toast.error(`❌ Test failed: ${response.status} ${responseData.message || ''}`);
         console.log('❌ Error response:', responseData);
         
-        // Show detailed error info
         if (responseData.errors) {
           console.log('Validation errors:', responseData.errors);
         }
@@ -634,8 +630,6 @@ const startFallbackPolling = (reference: string) => {
       setLoading(false);
     }
   };
-
-  /////////////
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -714,7 +708,6 @@ const startFallbackPolling = (reference: string) => {
     }
   };
 
-
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -780,10 +773,8 @@ const startFallbackPolling = (reference: string) => {
         toast.success('Bank account added successfully!');
         setBankAccountData({ account_name: '', account_number: '', bank_code: '' });
         
-        // Refresh the bank accounts list
         await fetchBankAccounts();
         
-        // Switch to withdraw tab if this was the first account
         if (bankAccounts.length === 0) {
           setActiveTab('withdraw');
         }
@@ -842,75 +833,70 @@ const startFallbackPolling = (reference: string) => {
     });
   };
 
-
-const refreshBankAccounts = async () => {
+  const refreshBankAccounts = async () => {
     await fetchBankAccounts();
     toast.success('Bank accounts refreshed');
   };
 
-  // FIX: Add a manual refresh function for transactions
   const refreshTransactions = async () => {
     await fetchTransactions();
     toast.success('Transactions refreshed');
   };
 
-  // Fix the helper functions
-const getStatusBadge = (status: any) => {
-  if (!status) return <Badge variant="secondary">Unknown</Badge>;
-  
-  const statusString = typeof status === 'string' ? status.toLowerCase() : 'pending';
-  
-  const variants = {
-    pending: 'secondary',
-    success: 'default',
-    completed: 'default',
-    failed: 'destructive',
-    error: 'destructive',
-  } as const;
+  const getStatusBadge = (status: any) => {
+    if (!status) return <Badge variant="secondary">Unknown</Badge>;
+    
+    const statusString = typeof status === 'string' ? status.toLowerCase() : 'pending';
+    
+    const variants = {
+      pending: 'secondary',
+      success: 'default',
+      completed: 'default',
+      failed: 'destructive',
+      error: 'destructive',
+    } as const;
 
-  return (
-    <Badge variant={variants[statusString as keyof typeof variants] || 'secondary'}>
-      {statusString}
-    </Badge>
-  );
-};
-
-const getTypeIcon = (type: any) => {
-  if (!type) return <Wallet className="h-4 w-4 text-gray-600" />;
-  
-  const typeString = typeof type === 'string' ? type.toLowerCase() : 'other';
-  
-  switch (typeString) {
-    case 'deposit':
-      return <ArrowDown className="h-4 w-4 text-green-600" />;
-    case 'withdrawal':
-      return <ArrowUp className="h-4 w-4 text-red-600" />;
-    case 'transfer':
-      return <Send className="h-4 w-4 text-blue-600" />;
-    default:
-      return <Wallet className="h-4 w-4 text-gray-600" />;
-    }
+    return (
+      <Badge variant={variants[statusString as keyof typeof variants] || 'secondary'}>
+        {statusString}
+      </Badge>
+    );
   };
 
-   // Show loading state
-    if (fetching) {
-      return (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              Wallet
-            </CardTitle>
-            <CardDescription>Loading wallet information...</CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center py-8">
-            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-          </CardContent>
-        </Card>
-      );
-    }
+  const getTypeIcon = (type: any) => {
+    if (!type) return <Wallet className="h-4 w-4 text-gray-600" />;
+    
+    const typeString = typeof type === 'string' ? type.toLowerCase() : 'other';
+    
+    switch (typeString) {
+      case 'deposit':
+        return <ArrowDown className="h-4 w-4 text-green-600" />;
+      case 'withdrawal':
+        return <ArrowUp className="h-4 w-4 text-red-600" />;
+      case 'transfer':
+        return <Send className="h-4 w-4 text-blue-600" />;
+      default:
+        return <Wallet className="h-4 w-4 text-gray-600" />;
+      }
+    };
 
-  // Show wallet setup if not created
+  if (fetching) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5" />
+            Wallet
+          </CardTitle>
+          <CardDescription>Loading wallet information...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center py-8">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!walletData?.wallet_created) {
     return (
       <div className="space-y-6">
@@ -937,7 +923,6 @@ const getTypeIcon = (type: any) => {
           </CardContent>
         </Card>
 
-        {/* Debug info */}
         <Card className="bg-muted/50">
           <CardHeader>
             <CardTitle className="text-sm">Debug Information</CardTitle>
@@ -954,11 +939,8 @@ const getTypeIcon = (type: any) => {
     );
   }
 
-
-  // Show full wallet interface if wallet exists
   return (
     <div className="space-y-6">
-      {/* Wallet Header with Refresh */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Wallet</h1>
@@ -970,7 +952,6 @@ const getTypeIcon = (type: any) => {
         </Button>
       </div>
 
-      {/* Wallet Overview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -996,21 +977,20 @@ const getTypeIcon = (type: any) => {
         </CardContent>
       </Card>
 
-
-      {/* Wallet Actions */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full">
+        {/* UPDATED: Added trust_point tab to the TabsList */}
+        <TabsList className="grid grid-cols-6 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="deposit">Deposit</TabsTrigger>
           <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
           <TabsTrigger value="transfer">Transfer</TabsTrigger>
           <TabsTrigger value="banks">Bank Accounts</TabsTrigger>
+          <TabsTrigger value="trust_point">Trust Score</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview">
           <div className="grid gap-6">
-            {/* Quick Actions */}
             <Card>
               <CardHeader>
                 <CardTitle>Quick Actions</CardTitle>
@@ -1046,441 +1026,384 @@ const getTypeIcon = (type: any) => {
               </CardContent>
             </Card>
 
-            {/* Recent Transactions */}
             <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5" />
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
                     Recent Transactions
-                </CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={refreshTransactions}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-              <CardDescription>
-                {transactions.length === 0 
-                  ? "Your transaction history will appear here" 
-                  : `Your recent wallet activity (${transactions.length} transactions)`
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {transactions.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No transactions yet</p>
-                  <p className="text-sm">Your transaction history will appear here once you make transactions</p>
-                  {walletData?.balance && walletData.balance > 0 && (
-                    <Button 
-                      variant="outline" 
-                      className="mt-4"
-                      onClick={() => setActiveTab('deposit')}
-                    >
-                      Make Your First Deposit
+                  </CardTitle>
+                  {/* <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refreshTransactions}
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </Button> */}
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-4"
+                    onClick={() => navigate('/transactions')} // or your preferred navigation
+                  >
+                    View All Transactions
+                  </Button>
+                </div>
+                <CardDescription>
+                  {transactions.length === 0 
+                    ? "Your transaction history will appear here" 
+                    : `Your recent wallet activity (${transactions.length} transactions)`
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {transactions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No transactions yet</p>
+                    <p className="text-sm">Your transaction history will appear here once you make transactions</p>
+                    {walletData?.balance && walletData.balance > 0 && (
+                      <Button 
+                        variant="outline" 
+                        className="mt-4"
+                        onClick={() => setActiveTab('deposit')}
+                      >
+                        Make Your First Deposit
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <TransactionList transactions={transactions.slice(0, 5)} />
+                )}
+                
+                {transactions.length > 5 && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-4"
+                    onClick={() => setActiveTab('transactions')}
+                  >
+                    View All Transactions
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Bank Accounts
+                  </CardTitle>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refreshBankAccounts}
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+                <CardDescription>
+                  {bankAccounts.length === 0 
+                    ? "Add bank accounts to withdraw funds" 
+                    : `Your linked bank accounts (${bankAccounts.length})`
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {bankAccounts.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground mb-4">No bank accounts linked</p>
+                    <Button onClick={() => setActiveTab('banks')}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Bank Account
                     </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {transactions.slice(0, 5).map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        {getTypeIcon(transaction.type || transaction.type)}
-                        <div>
-                          <p className="font-medium capitalize">
-                            {transaction.type || transaction.type}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {transaction.description}
-                          </p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(transaction.created_at)}
-                          </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {bankAccounts.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Building className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{account.account_name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {account.account_number} • {account.bank_name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {account.is_primary && (
+                                <Badge variant="default">Primary</Badge>
+                              )}
+                              {account.verified ? (
+                                <Badge variant="default">Verified</Badge>
+                              ) : (
+                                <Badge variant="secondary">Pending</Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
+                        {!account.is_primary && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSetPrimaryAccount(account.id)}
+                          >
+                            Set Primary
+                          </Button>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <p className={`font-medium ${
-                          (transaction.type || transaction.type) === 'deposit' ? 'text-green-600' : 
-                          (transaction.type || transaction.type) === 'withdrawal' ? 'text-red-600' : 
-                          'text-blue-600'
-                        }`}>
-                          {(transaction.type || transaction.type) === 'deposit' ? '+' : '-'}
-                          {formatCurrency(transaction.amount)}
-                        </p>
-                        {getStatusBadge(transaction.status)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {transactions.length > 5 && (
-                <Button variant="outline" className="w-full mt-4">
-                  View All Transactions ({transactions.length})
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
         {/* Deposit Tab */}
-       <TabsContent value="deposit">
-        <Card>
-          <CardHeader>
-            <CardTitle>Deposit Funds</CardTitle>
-            <CardDescription>
-              Add money to your wallet. Minimum: ₦100, Maximum: ₦10,000,000
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Debug button for development */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="space-y-2">
-                <Button 
-                  variant="outline" 
-                  onClick={testDepositWithExactFormat}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  Test Deposit with Exact Format
-                </Button>
-                <p className="text-xs text-muted-foreground text-center">
-                  Tests with: amount=1000, payment_method="Card", description="Test wallet deposit"
-                </p>
-              </div>
-            )}
+        <TabsContent value="deposit">
+          <Card>
+            <CardHeader>
+              <CardTitle>Deposit Funds</CardTitle>
+              <CardDescription>Add money to your wallet using any payment method</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleDeposit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount (₦)</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder="Enter amount"
+                    value={depositData.amount}
+                    onChange={(e) => setDepositData({ ...depositData, amount: e.target.value })}
+                    min="100"
+                    step="0.01"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum deposit: ₦100
+                  </p>
+                </div>
 
-            {depositError && (
-              <Alert variant="destructive">
-                <AlertDescription>{depositError}</AlertDescription>
-              </Alert>
-            )}
+                <div className="space-y-2">
+                  <Label htmlFor="payment_method">Payment Method</Label>
+                  <Select
+                    value={depositData.payment_method}
+                    onValueChange={(value: 'Card' | 'BankTransfer' | 'USSD') => 
+                      setDepositData({ ...depositData, payment_method: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Card">Card Payment</SelectItem>
+                      <SelectItem value="BankTransfer">Bank Transfer</SelectItem>
+                      <SelectItem value="USSD">USSD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <form onSubmit={handleDeposit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount (₦)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  min="100"
-                  max="10000000"
-                  step="0.01"
-                  required
-                  value={depositData.amount}
-                  onChange={(e) => {
-                    setDepositData({ ...depositData, amount: e.target.value });
-                    setDepositError('');
-                  }}
-                  placeholder="Enter amount (e.g., 1000.50)"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Enter amount in Naira. Decimals allowed.
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="payment_method">Payment Method</Label>
-                <Select 
-                  value={depositData.payment_method} 
-                  onValueChange={(value: 'Card' | 'BankTransfer' | 'USSD') => 
-                    setDepositData({ ...depositData, payment_method: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select payment method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Card">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        Card Payment
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="BankTransfer">
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        Bank Transfer
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="USSD">
-                      <div className="flex items-center gap-2">
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                          <line x1="12" y1="18" x2="12" y2="18"></line>
-                        </svg>
-                        USSD
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description (Optional)</Label>
+                  <Input
+                    id="description"
+                    placeholder="Deposit description"
+                    value={depositData.description}
+                    onChange={(e) => setDepositData({ ...depositData, description: e.target.value })}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  type="text"
-                  required
-                  value={depositData.description}
-                  onChange={(e) => setDepositData({ ...depositData, description: e.target.value })}
-                  placeholder="Enter deposit description"
-                />
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-sm text-blue-800 mb-2">Request Format Being Sent:</h4>
-                <pre className="text-xs bg-white p-2 rounded border text-blue-700 overflow-x-auto">
-                        {`{
-                        "amount": ${parseFloat(depositData.amount || '0')},
-                        "payment_method": "${depositData.payment_method}",
-                        "description": "${depositData.description}",
-                        "metadata": {
-                            "source": "web_app",
-                            "user_id": "${user?.id}",
-                            "timestamp": "${new Date().toISOString()}"
-                        }
-                        }`}
-                </pre>
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={loading || !depositData.amount || !depositData.description}
-                size="lg"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Processing Deposit...
-                  </>
-                ) : (
-                  `Deposit ₦${parseFloat(depositData.amount || '0').toLocaleString()}`
+                {depositError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{depositError}</AlertDescription>
+                  </Alert>
                 )}
-              </Button>
-            </form>
 
-            {/* Additional debug info */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-4 p-3 bg-muted rounded-lg">
-                <h4 className="font-medium text-sm mb-2">Backend Expectations:</h4>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  <li>• <strong>amount</strong>: f64 (100.0 to 10,000,000.0)</li>
-                  <li>• <strong>payment_method</strong>: "Card" | "BankTransfer" | "USSD"</li>
-                  <li>• <strong>description</strong>: String (required, min length 1)</li>
-                  <li>• <strong>metadata</strong>: Optional JSON object</li>
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Processing...' : 'Continue to Payment'}
+                </Button>
+
+                <div className="text-center">
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={testDepositWithExactFormat}
+                    disabled={loading}
+                    className="text-xs"
+                  >
+                    Test Deposit Format
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Withdraw Tab */}
         <TabsContent value="withdraw">
-        <Card>
-          <CardHeader>
-            <CardTitle>Withdraw Funds</CardTitle>
-            <CardDescription>
-              Transfer money to your bank account. Minimum: ₦100, Maximum: ₦5,000,000
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleWithdraw} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="withdraw_amount">Amount (₦)</Label>
-                <Input
-                  id="withdraw_amount"
-                  type="number"
-                  min="100"
-                  max="5000000"
-                  step="0.01"
-                  required
-                  value={withdrawData.amount}
-                  onChange={(e) => setWithdrawData({ ...withdrawData, amount: e.target.value })}
-                  placeholder="Enter amount"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Available: {formatCurrency(walletData?.balance || 0)}
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="bank_account">Bank Account</Label>
-                <Select 
-                  value={withdrawData.bank_account_id} 
-                  onValueChange={(value) => setWithdrawData({ ...withdrawData, bank_account_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select bank account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bankAccounts.length === 0 ? (
-                      <SelectItem value="no-accounts" disabled>
-                        No bank accounts added
-                      </SelectItem>
-                    ) : (
-                      bankAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          <div className="flex items-center gap-2">
-                            <Building className="h-4 w-4" />
-                            <div>
-                              <div>{account.account_name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {account.account_number} • {account.bank_name}
-                                {account.is_primary && ' • Primary'}
-                              </div>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {bankAccounts.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Please add a bank account first in the "Bank Accounts" tab
-                  </p>
-                )}
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={loading || bankAccounts.length === 0 || !withdrawData.amount}
-              >
-                {loading ? 'Processing...' : 'Withdraw Funds'}
-              </Button>
-            </form>
-
-            {bankAccounts.length === 0 && (
-              <div className="mt-4 p-4 border border-dashed rounded-lg text-center">
-                <Building className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  No bank accounts added yet. Add a bank account to enable withdrawals.
-                </p>
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => setActiveTab('banks')}
-                >
-                  Add Bank Account
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      {/* Transfer Tab */}
-      <TabsContent value="transfer">
-        <Card>
-          <CardHeader>
-            <CardTitle>Transfer Funds</CardTitle>
-            <CardDescription>Send money to another VeriNest user</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleTransfer} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="transfer_amount">Amount (₦)</Label>
-                <Input
-                  id="transfer_amount"
-                  type="number"
-                  min="10"
-                  max="1000000"
-                  step="0.01"
-                  required
-                  value={transferData.amount}
-                  onChange={(e) => setTransferData({ ...transferData, amount: e.target.value })}
-                  placeholder="Enter amount"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Available: {formatCurrency(walletData?.balance || 0)}
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="recipient">Recipient (Email or Username)</Label>
-                <Input
-                  id="recipient"
-                  type="text"
-                  required
-                  value={transferData.recipient_identifier}
-                  onChange={(e) => setTransferData({ ...transferData, recipient_identifier: e.target.value })}
-                  placeholder="Enter recipient's email or username"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="transfer_description">Description</Label>
-                <Input
-                  id="transfer_description"
-                  type="text"
-                  required
-                  value={transferData.description}
-                  onChange={(e) => setTransferData({ ...transferData, description: e.target.value })}
-                  placeholder="Enter transfer description"
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Processing...' : 'Transfer Funds'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      {/* Bank Accounts Tab */}
-     <TabsContent value="banks">
-        <Card>
+          <Card>
             <CardHeader>
-              <CardTitle>Bank Accounts</CardTitle>
-              <CardDescription>Manage your linked bank accounts</CardDescription>
+              <CardTitle>Withdraw Funds</CardTitle>
+              <CardDescription>Transfer money from your wallet to your bank account</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Add Bank Account Form - Only show if no accounts or explicitly adding */}
-              {(bankAccounts.length === 0 || activeTab === 'banks') && (
-                <form onSubmit={handleAddBankAccount} className="space-y-4 p-4 border rounded-lg">
-                  <h3 className="font-semibold">
-                    {bankAccounts.length === 0 ? 'Add Your First Bank Account' : 'Add Another Bank Account'}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="account_name">Account Name</Label>
-                      <Input
-                        id="account_name"
-                        type="text"
-                        required
-                        value={bankAccountData.account_name}
-                        onChange={(e) => setBankAccountData({ ...bankAccountData, account_name: e.target.value })}
-                        placeholder="Enter account name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="account_number">Account Number</Label>
-                      <Input
-                        id="account_number"
-                        type="text"
-                        required
-                        value={bankAccountData.account_number}
-                        onChange={(e) => setBankAccountData({ ...bankAccountData, account_number: e.target.value })}
-                        placeholder="Enter 10-digit account number"
-                      />
-                    </div>
+            <CardContent>
+              {bankAccounts.length === 0 ? (
+                <div className="text-center space-y-4 py-4">
+                  <Alert>
+                    <AlertDescription>
+                      You need to add a bank account before you can withdraw funds.
+                    </AlertDescription>
+                  </Alert>
+                  <Button onClick={() => setActiveTab('banks')}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Bank Account
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleWithdraw} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="withdraw-amount">Amount (₦)</Label>
+                    <Input
+                      id="withdraw-amount"
+                      type="number"
+                      placeholder="Enter amount"
+                      value={withdrawData.amount}
+                      onChange={(e) => setWithdrawData({ ...withdrawData, amount: e.target.value })}
+                      min="100"
+                      step="0.01"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Available balance: {formatCurrency(walletData.balance || 0)}
+                    </p>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bank-account">Bank Account</Label>
+                    <Select
+                      value={withdrawData.bank_account_id}
+                      onValueChange={(value) => setWithdrawData({ ...withdrawData, bank_account_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select bank account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.account_name} - {account.account_number} ({account.bank_name})
+                            {account.is_primary && ' (Primary)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Processing...' : 'Withdraw Funds'}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Transfer Tab */}
+        <TabsContent value="transfer">
+          <Card>
+            <CardHeader>
+              <CardTitle>Transfer Funds</CardTitle>
+              <CardDescription>Send money to another user</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleTransfer} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="transfer-amount">Amount (₦)</Label>
+                  <Input
+                    id="transfer-amount"
+                    type="number"
+                    placeholder="Enter amount"
+                    value={transferData.amount}
+                    onChange={(e) => setTransferData({ ...transferData, amount: e.target.value })}
+                    min="1"
+                    step="0.01"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Available balance: {formatCurrency(walletData.balance || 0)}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recipient">Recipient Email or Username</Label>
+                  <Input
+                    id="recipient"
+                    type="text"
+                    placeholder="Enter recipient's email or username"
+                    value={transferData.recipient_identifier}
+                    onChange={(e) => setTransferData({ ...transferData, recipient_identifier: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="transfer-description">Description (Optional)</Label>
+                  <Input
+                    id="transfer-description"
+                    placeholder="Transfer description"
+                    value={transferData.description}
+                    onChange={(e) => setTransferData({ ...transferData, description: e.target.value })}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Processing...' : 'Transfer Funds'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bank Accounts Tab */}
+        <TabsContent value="banks">
+          <div className="grid gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Add Bank Account</CardTitle>
+                <CardDescription>Link a bank account to withdraw funds</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddBankAccount} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="account_name">Account Name</Label>
+                    <Input
+                      id="account_name"
+                      placeholder="Enter account name as it appears on bank records"
+                      value={bankAccountData.account_name}
+                      onChange={(e) => setBankAccountData({ ...bankAccountData, account_name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="account_number">Account Number</Label>
+                    <Input
+                      id="account_number"
+                      placeholder="Enter 10-digit account number"
+                      value={bankAccountData.account_number}
+                      onChange={(e) => setBankAccountData({ ...bankAccountData, account_number: e.target.value })}
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      required
+                    />
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="bank_code">Bank</Label>
-                    <Select 
-                      value={bankAccountData.bank_code} 
+                    <Select
+                      value={bankAccountData.bank_code}
                       onValueChange={(value) => setBankAccountData({ ...bankAccountData, bank_code: value })}
                     >
                       <SelectTrigger>
@@ -1489,83 +1412,234 @@ const getTypeIcon = (type: any) => {
                       <SelectContent>
                         {banks.map((bank) => (
                           <SelectItem key={bank.code} value={bank.code}>
-                            <div className="flex items-center gap-2">
-                              <Building className="h-4 w-4" />
-                              {bank.name}
-                            </div>
+                            {bank.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button type="submit" disabled={loading}>
-                    <Plus className="h-4 w-4 mr-2" />
+
+                  <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Adding...' : 'Add Bank Account'}
                   </Button>
                 </form>
-              )}
+              </CardContent>
+            </Card>
 
-              {/* Bank Accounts List */}
-              <div className="space-y-4">
+            <Card>
+              <CardHeader>
                 <div className="flex justify-between items-center">
-                  <h3 className="font-semibold">Your Bank Accounts</h3>
-                  {bankAccounts.length > 0 && (
-                    <Badge variant="secondary">
-                      {bankAccounts.length} account{bankAccounts.length !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
+                  <CardTitle>Your Bank Accounts</CardTitle>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refreshBankAccounts}
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </Button>
                 </div>
-                
+                <CardDescription>
+                  {bankAccounts.length === 0 
+                    ? "No bank accounts linked yet" 
+                    : `Manage your linked bank accounts`
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
                 {bankAccounts.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No bank accounts added yet</p>
-                    <p className="text-sm">Add a bank account to enable withdrawals</p>
+                    <p className="text-sm">Add a bank account to withdraw funds from your wallet</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {bankAccounts.map((account) => (
-                      <div key={account.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Building className="h-4 w-4 text-muted-foreground" />
-                              <p className="font-medium">{account.account_name}</p>
-                              {account.is_primary && (
-                                <Badge variant="default" className="ml-2">Primary</Badge>
-                              )}
-                              {!account.verified && (
-                                <Badge variant="outline" className="ml-2">Pending Verification</Badge>
-                              )}
-                            </div>
+                      <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Building className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{account.account_name}</p>
                             <p className="text-sm text-muted-foreground">
                               {account.account_number} • {account.bank_name}
                             </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {account.is_primary && (
+                                <Badge variant="default">Primary</Badge>
+                              )}
+                              {account.verified ? (
+                                <Badge variant="default">Verified</Badge>
+                              ) : (
+                                <Badge variant="secondary">Pending Verification</Badge>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex gap-2">
-                            {!account.is_primary && (
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleSetPrimaryAccount(account.id)}
-                              >
-                                Set Primary
-                              </Button>
-                            )}
-                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {!account.is_primary && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSetPrimaryAccount(account.id)}
+                            >
+                              Set Primary
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* NEW: Trust Score Tab */}
+        <TabsContent value="trust_point">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Trust Score
+              </CardTitle>
+              <CardDescription>
+                Your financial trustworthiness and reliability rating
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Trust Score Overview */}
+                <div className="text-center space-y-4">
+                  <div className="relative inline-block">
+                    <div className="w-32 h-32 rounded-full border-8 border-primary/20 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">85%</div>
+                        <div className="text-xs text-muted-foreground">Score</div>
+                      </div>
+                    </div>
+                    <div className="absolute inset-0 rounded-full border-8 border-transparent border-t-primary animate-pulse"></div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Excellent</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Your trust score is in the top 20% of users
+                    </p>
+                  </div>
+                </div>
+
+                {/* Score Breakdown */}
+                <div className="space-y-4">
+                  <h4 className="font-medium">Score Breakdown</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-green-600" />
+                        <span>Profile Completion</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">95%</span>
+                        <Badge variant="default">Excellent</Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-blue-600" />
+                        <span>Transaction History</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">80%</span>
+                        <Badge variant="default">Good</Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-purple-600" />
+                        <span>Account Age</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">75%</span>
+                        <Badge variant="secondary">Average</Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-orange-600" />
+                        <span>Activity Level</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">90%</span>
+                        <Badge variant="default">Excellent</Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Benefits */}
+                <div className="space-y-4">
+                  <h4 className="font-medium">Your Benefits</h4>
+                  <div className="grid gap-3">
+                    <div className="flex items-center gap-3 p-3 border rounded-lg">
+                      <Award className="h-5 w-5 text-green-600" />
+                      <div>
+                        <p className="font-medium">Higher Transaction Limits</p>
+                        <p className="text-sm text-muted-foreground">Up to ₦5,000,000 per transaction</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 border rounded-lg">
+                      <Star className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <p className="font-medium">Priority Support</p>
+                        <p className="text-sm text-muted-foreground">24/7 dedicated customer service</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 border rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-purple-600" />
+                      <div>
+                        <p className="font-medium">Better Rates</p>
+                        <p className="text-sm text-muted-foreground">Preferred exchange rates and fees</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Improvement Tips */}
+                <div className="space-y-4">
+                  <h4 className="font-medium">Improve Your Score</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span>Complete your profile verification</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span>Maintain consistent transaction activity</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span>Keep your account in good standing</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span>Add multiple verification methods</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Button className="w-full">
+                  <Shield className="h-4 w-4 mr-2" />
+                  View Detailed Report
+                </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* Transfer Tab */}
-
-        {/* Bank Accounts Tab */}
       </Tabs>
     </div>
   );
