@@ -10,7 +10,7 @@ interface User {
   email: string;
   username: string;
   email_verified: boolean;
-  kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified';
+  kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified'| 'submitted' | 'approved';
   role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'verifier' | undefined;
   verification_status?: 'pending' | 'submitted' | 'approved' | 'rejected';
   verification_data?: any;
@@ -18,21 +18,21 @@ interface User {
   bank_account_linked?: boolean;
   profile_completed?: boolean;
   
-  // Add backend fields
-  verified?: boolean; // Backend uses 'verified' for email verification
-  document_verified?: boolean; // Backend field
-  trust_score?: number; // Backend field
-  nationality?: string; // Backend field
-  lga?: string; // Backend field
-  dob?: string; // Backend field
-  wallet_address?: string; // Backend field
-  avatar_url?: string; // Backend field
-  referral_code?: string; // Backend field
-  referral_count?: number; // Backend field
-  verification_type?: string; // Backend field
-  nin_number?: string; // Backend field
-  verification_number?: string; // Backend field
-  nearest_landmark?: string; // Backend field
+  // Backend fields
+  verified?: boolean;
+  document_verified?: boolean;
+  trust_score?: number;
+  nationality?: string;
+  lga?: string;
+  dob?: string;
+  wallet_address?: string;
+  avatar_url?: string;
+  referral_code?: string;
+  referral_count?: number;
+  verification_type?: string;
+  nin_number?: string;
+  verification_number?: string;
+  nearest_landmark?: string;
 }
 
 interface AuthContextType {
@@ -58,6 +58,7 @@ interface AuthContextType {
   updateVerificationStatus: (status: User['verification_status']) => void;
   checkVerificationStatus: () => Promise<boolean>;
   getNextRequiredStep: (user: User) => string;
+  authInitialized: boolean; 
 }
 
 interface RegisterData {
@@ -106,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false); 
   const [verificationProgress, setVerificationProgress] = useState<VerificationProgress | null>(null);
   const navigate = useNavigate();
 
@@ -128,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Validate token and get fresh user data
         try {
+          console.log('🔐 Validating stored token...');
           const userData = await apiClient.get('/users/me');
           console.log('Token validation successful:', userData);
           
@@ -145,25 +148,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.warn('Invalid verification progress data');
               }
             }
-          } else if (storedUser) {
+          } else {
             // Fallback to stored user
-            try {
-              const parsed = JSON.parse(storedUser);
-              setUser(parsed);
-            } catch (e) {
-              console.warn('Invalid user in localStorage, clearing it');
-              localStorage.removeItem('user');
+            console.log('⚠️ No user data in response, using stored user');
+            if (storedUser) {
+              try {
+                const parsed = JSON.parse(storedUser);
+                setUser(parsed);
+              } catch (e) {
+                console.error('❌ Invalid stored user data');
+                localStorage.removeItem('user');
+              }
             }
           }
         } catch (error: any) {
           console.error('Token validation failed:', error);
           // Token is invalid, clear everything
-          if (error.message === 'Authentication required') {
             handleTokenExpiration();
-          }
         }
       } else if (storedUser) {
         // No token but user exists
+         console.log('⚠️ No token but user exists in storage');
         try {
           const parsed = JSON.parse(storedUser);
           setUser(parsed);
@@ -173,6 +178,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       setLoading(false);
+      setAuthInitialized(true);
+      console.log('✅ Auth initialization complete');
     };
 
     initializeAuth();
@@ -182,16 +189,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 const normalizeUserData = (userData: any): User => {
   console.log('🔄 Normalizing user data from backend:', userData);
   
+  // Use backend values directly - no mapping needed
+  // const kyc_verified = userData.verification_status || 'pending';
+  
+  // console.log('📊 KYC Status (using backend value):', kyc_verified);
+  
   // Determine KYC status based on backend fields
   let kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified' = 'unverified';
   
-  if (userData.verification_status === 'approved' || userData.document_verified) {
+  if (userData.verification_status === 'approved' || userData.document_verified === true) {
     kyc_verified = 'verified';
   } else if (userData.verification_status === 'pending' || userData.verification_status === 'submitted') {
     kyc_verified = 'pending';
   } else if (userData.verification_status === 'rejected') {
     kyc_verified = 'rejected';
+  } else {
+    kyc_verified = 'unverified'; // Default for new users
   }
+
+  console.log('📊 KYC Status Mapping:', {
+      backend_verification_status: userData.verification_status,
+      backend_document_verified: userData.document_verified,
+      mapped_kyc_verified: kyc_verified
+    });
 
   return {
     id: userData.id,
@@ -203,7 +223,8 @@ const normalizeUserData = (userData: any): User => {
     email_verified: getSafeBoolean(userData.verified, getSafeBoolean(userData.email_verified)),
     
     // KYC verification status
-    kyc_verified,
+    kyc_verified: kyc_verified,
+    //as 'pending' | 'verified' | 'rejected' | 'submitted' | 'approved' | 'unverified',
     verification_status: userData.verification_status || 'pending',
     
     // Role
@@ -245,14 +266,16 @@ const normalizeUserData = (userData: any): User => {
 
   const isVerificationComplete = (user: User): boolean => {
     return user.email_verified && 
-           user.verification_status === 'approved' && 
+           user.kyc_verified === 'verified' && 
            user.role !== undefined && 
+           user.role !== 'user' &&
            getSafeBoolean(user.wallet_created) && 
            getSafeBoolean(user.bank_account_linked) && 
            getSafeBoolean(user.profile_completed);
   };
 
   const handleTokenExpiration = () => {
+    console.log('🔒 Token expired, clearing auth data');
     apiClient.clearToken();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -409,15 +432,21 @@ const normalizeUserData = (userData: any): User => {
 
 // contexts/AuthContext.tsx (Enhanced getNextRequiredStep)
 const getNextRequiredStep = (user: User): string => {
-  console.log('🔍 Determining next step for user:', user);
-  if (!user) return 'register';
+  console.log('🔍 Determining next step for user:', {
+      email_verified: user.email_verified,
+      kyc_verified: user.kyc_verified,
+      role: user.role,
+      profile_completed: user.profile_completed
+    });
+
+  if (!user) return 'login';
   
   if (!user.email_verified) {
     console.log('📧 Email not verified');
     return 'verify-email';
   }
   
-  if (!user.kyc_verified || user.kyc_verified === 'unverified') {
+  if (user.kyc_verified === 'unverified') {
     console.log('🆔 KYC not verified:', user.kyc_verified);
     return 'kyc';
   }
@@ -427,7 +456,7 @@ const getNextRequiredStep = (user: User): string => {
     return 'dashboard'; // Go to dashboard if KYC is pending
   }
   
-  if (!user.role) {
+  if (!user.role || user.role === 'user') {
     console.log('🎭 No role selected');
     return 'select-role';
   }
@@ -446,73 +475,105 @@ const getNextRequiredStep = (user: User): string => {
     setUser(prev => prev ? { ...prev, verification_status: status } : null);
   };
 
-  const login = async (email: string, password: string) => {
-    try {
-      const data = await apiClient.post('/auth/login', { email, password });
-      
-      const token = data?.token ?? data?.data?.token;
-      const userObj = data?.user ?? data?.data?.user;
+ //fixed
+// In AuthContext.tsx - FIXED login function
+const login = async (email: string, password: string) => {
+  try {
+    const data = await apiClient.post('/auth/login', { email, password });
+    
+    console.log('📨 Login API response:', data);
 
-      if (!token) {
-        throw new Error('Login succeeded but no token returned');
-      }
+    const token = data?.token ?? data?.data?.token;
 
-      // Set token in API client and state
-      apiClient.setToken(token);
-      setToken(token);
-      localStorage.setItem('token', token);
-      
-      // Store user data
-      if (userObj) {
-        const normalizedUser = normalizeUserData(userObj);
-        localStorage.setItem('user', JSON.stringify(normalizedUser));
-        setUser(normalizedUser);
-
-        console.log('✅ Login successful, user:', normalizedUser);
-
-        // Check if user needs verification
-        const nextStep = getNextRequiredStep(normalizedUser);
-      console.log('📍 Next step:', nextStep);
-
-      switch (nextStep) {
-        case 'verify-email':
-          toast.success('Login successful! Please verify your email.');
-          navigate('/verify-email');
-          break;
-        
-        case 'kyc':
-          toast.success('Login successful! Starting verification process...');
-          startVerificationFlow();
-          break;
-        
-        case 'select-role':
-          toast.success('Login successful! Please select your role.');
-          navigate('/select-role');
-          break;
-        
-        case 'worker-profile':
-          toast.success('Login successful! Complete your worker profile.');
-          navigate('/worker/profile-setup');
-          break;
-        
-        case 'employer-dashboard':
-          toast.success('Login successful! Welcome back.');
-          navigate('/employer/dashboard');
-          break;
-        
-        default:
-          toast.success('Login successful!');
-          navigate('/dashboard');
-      }
-    } else {
-      // Fallback if no user object
-      toast.success('Login successful!');
-      navigate('/dashboard');
+    if (!token) {
+      throw new Error('Login succeeded but no token returned');
     }
+
+    // Set token in API client and localStorage FIRST
+    apiClient.setToken(token);
+    localStorage.setItem('token', token);
+    
+    // Set token in state IMMEDIATELY
+    setToken(token);
+
+    console.log('✅ Token set, now fetching user data...');
+
+    // Fetch user data after successful login
+    try {
+      const userResponse = await apiClient.get('/users/me');
+      console.log('👤 User data response:', userResponse);
+      
+      if (userResponse.data && userResponse.data.user) {
+        const normalizedUser = normalizeUserData(userResponse.data.user);
+        
+        // Set user in state and localStorage
+        setUser(normalizedUser);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+
+        console.log('✅ Auth state updated with user:', normalizedUser);
+
+        // Navigate after user data is loaded
+        const nextStep = getNextRequiredStep(normalizedUser);
+        console.log('📍 Next step determined:', nextStep);
+        
+        setTimeout(() => {
+          navigateToNextStep(nextStep);
+        }, 0);
+
+      } else {
+        // If no user data, still proceed but log warning
+        console.warn('⚠️ No user data received from /users/me');
+        setTimeout(() => {
+          toast.success('Login successful!');
+          navigate('/dashboard', { replace: true });
+        }, 0);
+      }
+    } catch (userError: any) {
+      console.error('❌ Failed to fetch user data:', userError);
+      // Even if user fetch fails, proceed with login using token only
+      setTimeout(() => {
+        toast.success('Login successful!');
+        navigate('/dashboard', { replace: true });
+      }, 0);
+    }
+
   } catch (error: any) {
     console.error('❌ Login failed:', error);
     toast.error(error.message || 'Login failed');
     throw error;
+  }
+};
+
+const navigateToNextStep = (nextStep: string) => {
+  switch (nextStep) {
+    case 'verify-email':
+      toast.success('Login successful! Please verify your email.');
+      navigate('/verify-email', { replace: true });
+      break;
+    
+    case 'kyc':
+      toast.success('Login successful! Starting verification process...');
+      startVerificationFlow();
+      break;
+    
+    case 'select-role':
+      toast.success('Login successful! Please select your role.');
+      navigate('/select-role', { replace: true });
+      break;
+    
+    case 'worker-profile':
+      toast.success('Login successful! Complete your worker profile.');
+      navigate('/worker/profile-setup', { replace: true });
+      break;
+    
+    case 'employer-dashboard':
+      toast.success('Login successful! Welcome back.');
+      navigate('/employer/dashboard', { replace: true });
+      break;
+    
+    default:
+      toast.success('Login successful!');
+      navigate('/dashboard', { replace: true });
   }
 };
 
@@ -660,6 +721,7 @@ const getNextRequiredStep = (user: User): string => {
     updateVerificationStatus,
     checkVerificationStatus,
     getNextRequiredStep,
+    authInitialized
   };
 
   return (
@@ -676,5 +738,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-// Export verification steps for use in components

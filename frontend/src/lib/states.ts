@@ -950,3 +950,14 @@ export const nigeriaStates: StateWithLGAs[] = [
     ]
   }
 ];
+
+export const getLGAsForState = (stateName: string): string[] => {
+  const state = nigeriaStates.find(s => s.state.toLowerCase() === stateName.toLowerCase());
+  return state ? state.lgas : [];
+};
+
+export const getStates = (): string[] => {
+  return nigeriaStates.map(state => state.state);
+};
+
+export const NIGERIAN_STATES = getStates();
