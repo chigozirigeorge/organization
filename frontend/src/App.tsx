@@ -38,7 +38,7 @@ import { TransactionsPage } from './components/TransactionsPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminDashboard } from './components/AdminDashboard';
 import { VerifierDashboard } from './components/VerifierDashboard';
-import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/react"
 
 // KYC Required Route - Only for routes that need KYC
 const KYCRequiredRoute = ({ children }: { children: React.ReactNode }) => {
@@ -238,7 +238,7 @@ function App() {
         <div className="min-h-screen bg-background text-foreground">
           <AppRoutes />
           <Toaster position="top-right" />
-          <SpeedInsights />
+          <Analytics />
         </div>
       </AuthProvider>
     </Router>
