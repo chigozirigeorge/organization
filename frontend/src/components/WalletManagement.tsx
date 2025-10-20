@@ -708,39 +708,81 @@ export const WalletManagement = () => {
     }
   };
 
-  const handleTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const response = await fetch('https://verinest.up.railway.app/api/wallet/transfer', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } as HeadersInit,
-        body: JSON.stringify({
-          amount: parseFloat(transferData.amount),
-          recipient_identifier: transferData.recipient_identifier,
-          description: transferData.description || 'Fund transfer'
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        toast.success('Transfer completed successfully!');
-        setTransferData({ amount: '', recipient_identifier: '', description: '' });
-        await checkWalletStatus();
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Transfer failed');
-      }
-    } catch (error: any) {
-      console.error('Transfer failed:', error);
-      toast.error(error.message || 'Transfer failed');
-    } finally {
-      setLoading(false);
+// In WalletManagement.tsx - Fix the transfer function
+const handleTransfer = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  try {
+    const transferAmount = parseFloat(transferData.amount);
+    
+    if (isNaN(transferAmount) || transferAmount < 1) {
+      toast.error('Please enter a valid amount');
+      return;
     }
-  };
+
+    if (transferAmount > (walletData?.balance || 0)) {
+      toast.error('Insufficient balance');
+      return;
+    }
+
+    if (!transferData.recipient_identifier) {
+      toast.error('Please enter recipient email or username');
+      return;
+    }
+
+    const requestBody = {
+      amount: transferAmount,
+      recipient_identifier: transferData.recipient_identifier.trim(),
+      description: transferData.description || 'Fund transfer'
+    };
+
+    console.log('🔄 Sending transfer request:', requestBody);
+
+    const response = await fetch('https://verinest.up.railway.app/api/wallet/transfer', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const responseText = await response.text();
+    console.log('📨 Transfer response status:', response.status);
+    console.log('📨 Transfer response body:', responseText);
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { message: responseText };
+    }
+
+    if (response.ok) {
+      toast.success('Transfer completed successfully!');
+      setTransferData({ amount: '', recipient_identifier: '', description: '' });
+      await checkWalletStatus(); // Refresh wallet data
+    } else {
+      // Provide more specific error messages
+      if (response.status === 404) {
+        throw new Error('Transfer service is currently unavailable. Please try again later.');
+      } else if (response.status === 400) {
+        throw new Error(responseData.message || 'Invalid transfer request');
+      } else if (response.status === 422) {
+        throw new Error('Validation failed. Please check the recipient details.');
+      } else {
+        throw new Error(responseData.message || `Transfer failed: ${response.status}`);
+      }
+    }
+  } catch (error: any) {
+    console.error('❌ Transfer failed:', error);
+    toast.error(error.message || 'Transfer failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+/////
 
   const handleAddBankAccount = async (e: React.FormEvent) => {
     e.preventDefault();

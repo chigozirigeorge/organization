@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,12 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import logo from '@/assets/verinest.png';
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+  if (isAuthenticated) {
+    const from = location.state?.from?.pathname || '/dashboard';
+    console.log('🔄 Already authenticated, redirecting to:', from);
+    
+    // Small delay to ensure all state is updated
+    const timer = setTimeout(() => {
+      navigate(from, { replace: true });
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }
+}, [isAuthenticated, navigate, location]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

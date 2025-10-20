@@ -35,6 +35,8 @@ export const KYCFlow = () => {
     nationality: ''
   });
 
+  const [termsScrolled, setTermsScrolled] = useState(false);
+  const [privacyScrolled, setPrivacyScrolled] = useState(false);
 
   const steps: { key: KYCStep; title: string; description: string; icon: any }[] = [
     { key: 'terms', title: 'Terms & Conditions', description: 'Review and accept our terms', icon: FileText },
@@ -62,6 +64,26 @@ export const KYCFlow = () => {
     setAcceptedPrivacy(true);
     setCurrentStep('document');
   };
+
+  // Add scroll handlers for terms and privacy
+  const handleTermsScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 50; // 50px buffer
+    
+    if (scrolledToBottom && !termsScrolled) {
+      setTermsScrolled(true);
+    }
+  };
+
+  const handlePrivacyScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 50; // 50px buffer
+    
+    if (scrolledToBottom && !privacyScrolled) {
+      setPrivacyScrolled(true);
+    }
+  };
+
 
   const handleDocumentUpload = (data: any) => {
     setVerificationData(prev => ({ ...prev, ...data }));
@@ -212,13 +234,18 @@ const submitVerification = async () => {
       case 'terms':
         return (
           <div className="space-y-6">
-            <TermsAndConditions />
+            <div className="h-[500px] overflow-y-auto border rounded-lg" onScroll={handleTermsScroll}>
+              <TermsAndConditions />
+            </div>
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => navigate('/dashboard')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard
               </Button>
-              <Button onClick={handleAcceptTerms} disabled={!acceptedTerms}>
+              <Button 
+                onClick={handleAcceptTerms} 
+                disabled={!termsScrolled} // Enable only after scrolling
+              >
                 I Accept Terms
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
@@ -229,13 +256,18 @@ const submitVerification = async () => {
       case 'privacy':
         return (
           <div className="space-y-6">
-            <PrivacyPolicy />
+            <div className="h-[500px] overflow-y-auto border rounded-lg" onScroll={handlePrivacyScroll}>
+              <PrivacyPolicy />
+            </div>
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setCurrentStep('terms')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Terms
               </Button>
-              <Button onClick={handleAcceptPrivacy} disabled={!acceptedPrivacy}>
+              <Button 
+                onClick={handleAcceptPrivacy} 
+                disabled={!privacyScrolled} // Enable only after scrolling
+              >
                 I Accept Privacy Policy
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>

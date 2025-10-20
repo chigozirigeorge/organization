@@ -1,4 +1,4 @@
-// components/RoleSelection.tsx
+// FIXED RoleSelection.tsx with correct snake_case role values
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -19,26 +19,34 @@ export const RoleSelection = ({ onSelect, selectedRole }: RoleSelectionProps) =>
   const [loading, setLoading] = useState(false);
 
   const handleRoleSelect = async (role: 'worker' | 'employer') => {
-
     // Check if user has completed KYC verification
-  if (!user?.kyc_verified || user.kyc_verified === 'unverified') {
-    toast.error('Please complete identity verification first');
-    navigate('/verify/kyc');
-    return;
-  }
+    if (!user?.kyc_verified || user.kyc_verified === 'unverified') {
+      toast.error('Please complete identity verification first');
+      navigate('/verify/kyc');
+      return;
+    }
 
-  // Check if KYC is still pending
-  if (user.kyc_verified === 'pending') {
-    toast.info('Your identity verification is under review. Please wait for approval before selecting a role.');
-    return;
-  }
+    // Check if KYC is still pending
+    if (user.kyc_verified === 'pending') {
+      toast.info('Your identity verification is under review. Please wait for approval before selecting a role.');
+      return;
+    }
+
+    // Check if KYC is rejected
+    if (user.kyc_verified === 'rejected') {
+      toast.error('Your identity verification was rejected. Please complete verification again.');
+      navigate('/verify/kyc');
+      return;
+    }
 
     setLoading(true);
     try {
-      // Convert to backend expected format (capital first letter)
+      // Use the EXACT snake_case values from the database enum
       const backendRole = role === 'worker' ? 'Worker' : 'Employer';
 
-      // Use the correct endpoint with the exact request body format
+      console.log('Attempting to update role to:', backendRole);
+      console.log('User ID:', user?.id);
+
       const response = await fetch('https://verinest.up.railway.app/api/users/role/upgrade', {
         method: 'PUT',
         headers: {
@@ -46,12 +54,17 @@ export const RoleSelection = ({ onSelect, selectedRole }: RoleSelectionProps) =>
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          target_user_id: user?.id, // Must be current user's ID
-          new_role: backendRole // 'Worker' or 'Employer' (with capital first letter)
+          target_user_id: user?.id,
+          new_role: backendRole // 'worker' or 'employer' (exact snake_case values)
         }),
       });
 
+      console.log('Response status:', response.status);
+
       if (response.ok) {
+        const result = await response.json();
+        console.log('Role update successful:', result);
+
         // Update local user context
         if (updateUser) {
           const userResponse = await fetch('https://verinest.up.railway.app/api/users/me', {
@@ -61,15 +74,15 @@ export const RoleSelection = ({ onSelect, selectedRole }: RoleSelectionProps) =>
           });
           if (userResponse.ok) {
             const userData = await userResponse.json();
+            console.log('Updated user data:', userData);
             updateUser(userData);
           }
         }
 
-        // If onSelect prop is provided, use it
+        // Success
         if (onSelect) {
           onSelect(role);
         } else {
-          // Default behavior if no onSelect provided
           toast.success(`You're now a ${role}!`);
           if (role === 'worker') {
             navigate('/worker/profile-setup');
@@ -78,16 +91,30 @@ export const RoleSelection = ({ onSelect, selectedRole }: RoleSelectionProps) =>
           }
         }
       } else {
-        // Handle error response
-        let errorMessage = `Failed to update role: ${response.status}`;
-        try {
-          const errorText = await response.text();
-          if (errorText) {
+        // Handle specific error responses
+        const errorText = await response.text();
+        console.error('Role update failed:', errorText);
+        
+        let errorMessage = 'Failed to update role';
+        
+        if (response.status === 422) {
+          errorMessage = 'Invalid role format. Please try again.';
+        } else if (response.status === 500) {
+          // Provide more specific error message for constraint violations
+          if (errorText.includes('violates check constraint')) {
+            errorMessage = 'Database constraint error. The role value is not accepted.';
+          } else {
+            errorMessage = 'Server error. Please try again or contact support.';
+          }
+        } else if (errorText) {
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorText;
+          } catch {
             errorMessage = errorText;
           }
-        } catch {
-          // Ignore if we can't read the error text
         }
+        
         throw new Error(errorMessage);
       }
     } catch (error) {

@@ -19,6 +19,7 @@ export const WorkerDashboard = () => {
   const [recentApplications, setRecentApplications] = useState<JobApplication[]>([]);
   const [activeContracts, setActiveContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -26,6 +27,7 @@ export const WorkerDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
+      setError(null);
       const response = await fetch('https://verinest.up.railway.app/api/labour/worker/dashboard', {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -34,12 +36,24 @@ export const WorkerDashboard = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setStats(data.stats || data);
+        console.log('📊 Dashboard API Response:', data); // Debug log
+        
+        // Safely set stats with defaults
+        setStats({
+          totalApplications: data.stats?.totalApplications || data.totalApplications || 0,
+          activeContracts: data.stats?.activeContracts || data.activeContracts || 0,
+          completedJobs: data.stats?.completedJobs || data.completedJobs || 0,
+          totalEarnings: data.stats?.totalEarnings || data.totalEarnings || 0,
+        });
+        
         setRecentApplications(data.recentApplications || []);
         setActiveContracts(data.activeContracts || []);
+      } else {
+        throw new Error(`Failed to fetch dashboard data: ${response.status}`);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -49,6 +63,23 @@ export const WorkerDashboard = () => {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Worker Dashboard</h1>
+            <p className="text-muted-foreground">Manage your jobs and applications</p>
+          </div>
+        </div>
+        <div className="text-center py-12">
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={fetchDashboardData}>Retry</Button>
+        </div>
       </div>
     );
   }
@@ -112,7 +143,8 @@ export const WorkerDashboard = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₦{stats.totalEarnings.toLocaleString()}</div>
+            {/* FIXED: Safely handle totalEarnings with proper null check */}
+            <div className="text-2xl font-bold">₦{(stats.totalEarnings || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Lifetime earnings
             </p>
@@ -144,8 +176,10 @@ export const WorkerDashboard = () => {
                     <div className="space-y-1">
                       <p className="font-medium">{application.cover_letter}</p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>₦{application.proposed_rate.toLocaleString()}</span>
-                        <span>{application.estimated_completion} days</span>
+                        {/* FIXED: Safely handle proposed_rate */}
+                        <span>₦{(application.proposed_rate || 0).toLocaleString()}</span>
+                        {/* FIXED: Safely handle estimated_completion */}
+                        <span>{(application.estimated_completion || 0)} days</span>
                         <Badge variant={
                           application.status === 'accepted' ? 'default' : 
                           application.status === 'rejected' ? 'destructive' : 'secondary'
@@ -182,15 +216,18 @@ export const WorkerDashboard = () => {
                 activeContracts.slice(0, 5).map((contract) => (
                   <div key={contract.id} className="p-3 border rounded-lg">
                     <div className="space-y-2">
-                      <p className="font-medium">{contract.job.title}</p>
+                      <p className="font-medium">{contract.job?.title || 'Untitled Job'}</p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>₦{contract.agreed_rate.toLocaleString()}</span>
-                        <span>{contract.agreed_timeline} days</span>
+                        {/* FIXED: Safely handle agreed_rate */}
+                        <span>₦{(contract.agreed_rate || 0).toLocaleString()}</span>
+                        {/* FIXED: Safely handle agreed_timeline */}
+                        <span>{(contract.agreed_timeline || 0)} days</span>
                         <Badge variant="outline">{contract.status}</Badge>
                       </div>
                       <div className="flex items-center text-sm">
                         <MapPin className="h-3 w-3 mr-1" />
-                        {contract.job.location_city}, {contract.job.location_state}
+                        {/* FIXED: Safely handle job location */}
+                        {contract.job?.location_city || 'Unknown'}, {contract.job?.location_state || 'Unknown'}
                       </div>
                     </div>
                   </div>
