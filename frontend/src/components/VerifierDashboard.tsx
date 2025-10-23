@@ -70,29 +70,79 @@ export const VerifierDashboard = () => {
     fetchPendingVerifications();
   }, []);
 
-  const fetchPendingVerifications = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('https://verinest.up.railway.app/api/verification/admin/pending', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+// In VerifierDashboard.tsx - Add function to fetch user data
+const fetchUserDataForVerifications = async (verifications: VerificationRequest[]) => {
+  try {
+    const verificationsWithUsers = await Promise.all(
+      verifications.map(async (verification) => {
+        try {
+          // Fetch user data for each verification
+          const userResponse = await fetch(`https://verinest.up.railway.app/api/users/admin/users/${verification.user_id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            return {
+              ...verification,
+              user: userData.data?.user || userData.user || userData.data
+            };
+          }
+          return verification; // Return original if user fetch fails
+        } catch (error) {
+          console.error(`Error fetching user data for ${verification.user_id}:`, error);
+          return verification; // Return original if error
+        }
+      })
+    );
+    
+    return verificationsWithUsers;
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    return verifications; // Return original array if overall error
+  }
+};
 
-      if (response.ok) {
-        const data = await response.json();
-        setVerifications(data.data || []);
-        calculateStats(data.data || []);
-      } else {
-        throw new Error('Failed to fetch pending verifications');
+// Update fetchPendingVerifications to use the new function
+const fetchPendingVerifications = async () => {
+  try {
+    setLoading(true);
+    console.log('🔄 Fetching pending verifications...');
+    
+    const response = await fetch('https://verinest.up.railway.app/api/verification/admin/pending', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    console.log('📊 API Response status:', response.status);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ API Response data:', data);
+      
+      let verifications = data.data || [];
+      
+      // If verifications don't have user data, fetch it separately
+      if (verifications.length > 0 && !verifications[0].user) {
+        console.log('👤 User data missing, fetching separately...');
+        verifications = await fetchUserDataForVerifications(verifications);
       }
-    } catch (error) {
-      console.error('Error fetching pending verifications:', error);
-      toast.error('Failed to load verification requests');
-    } finally {
-      setLoading(false);
+      
+      setVerifications(verifications);
+      calculateStats(verifications);
+    } else {
+      throw new Error('Failed to fetch pending verifications');
     }
-  };
+  } catch (error) {
+    console.error('Error fetching pending verifications:', error);
+    toast.error('Failed to load verification requests');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const calculateStats = (verifications: VerificationRequest[]) => {
     const pending = verifications.filter(v => 

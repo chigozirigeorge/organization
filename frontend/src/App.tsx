@@ -1,4 +1,4 @@
-// App.tsx - Fixed with proper route protection
+// App.tsx - Updated with proper dashboard routing
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -11,8 +11,6 @@ import { PaymentVerification } from './components/PaymentVerification';
 import { EmailVerification } from './components/EmailVerification';
 import { PaymentSuccess } from './pages/PaymentSuccess';
 import { PaymentFailed } from './pages/PaymentFailed';
-import { WorkerDashboard } from './components/WorkerDashboard';
-import { EmployerDashboard } from './components/EmployerDashboard';
 import { JobsList } from './components/JobsList';
 import { JobDetails } from './components/JobDetails';
 import { CreateJob } from './components/CreateJob';
@@ -32,35 +30,15 @@ import { PressKit } from './components/PressKit';
 import { Blog } from './components/Blog';
 import { KYCFlow } from './components/KYCFlow';
 import { RoleSelection } from './components/RoleSelection';
-import { Button } from './components/ui/button';
 import { Settings } from './components/Settings';
 import { TransactionsPage } from './components/TransactionsPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminDashboard } from './components/AdminDashboard';
 import { VerifierDashboard } from './components/VerifierDashboard';
+import { WorkerPortfolio } from './components/WorkerPortfolio';
 import { Analytics } from "@vercel/analytics/react"
 
-// KYC Required Route - Only for routes that need KYC
-const KYCRequiredRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, user, loading } = useAuth();
-  
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  // If KYC is already verified, go to dashboard
-  if (user?.kyc_verified === 'verified') {
-    return <Navigate to="/dashboard" replace />;
-  }
-  
-  return <>{children}</>;
-};
-
-// Main App Routes - No KYC check for basic routes
+// Main App Routes - All protected routes now go through Dashboard
 const AppRoutes = () => {
   const { authInitialized } = useAuth();
   
@@ -93,135 +71,24 @@ const AppRoutes = () => {
       <Route path="/press" element={<PressKit />} />
       <Route path="/blog" element={<Blog />} />
       
-      {/* KYC Verification Flow - Only for unverified users */}
+      {/* KYC Verification Flow */}
       <Route path="/verify/kyc" element={
         <ProtectedRoute>
           <KYCFlow />
         </ProtectedRoute>
       } />
       
-      {/* Role Selection - Protected but no KYC required */}
+      {/* Role Selection */}
       <Route path="/select-role" element={
         <ProtectedRoute>
           <RoleSelection />
         </ProtectedRoute>
       } />
 
-      {/* Transactions Page - Protected but no KYC required */}
-      <Route path="/transactions" element={
+      {/* Main Dashboard - All authenticated routes are nested here */}
+      <Route path="/dashboard/*" element={
         <ProtectedRoute>
-          <ProtectedLayout>
-            <TransactionsPage />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      {/* Protected Routes - Require authentication but not necessarily KYC */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <Dashboard />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      {/* Routes that require KYC verification */}
-      <Route path="/worker/dashboard" element={
-        <ProtectedRoute requireKYC>
-          <ProtectedLayout>
-            <WorkerDashboard />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-    
-      <Route path="/employer/dashboard" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <EmployerDashboard />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/jobs" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <JobsList />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/jobs/create" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <CreateJob />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/jobs/my-jobs" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <MyJobs />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/jobs/:id" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <JobDetails />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-
-      <Route path="/jobs/:id/apply" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <CreateJobApplication />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/worker/profile-setup" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <WorkerProfileSetup />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-
-      {/* Admin Routes */}
-      <Route path="/admin/dashboard" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <AdminDashboard />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-
-      {/* Verifier Routes */}
-      <Route path="/verifier/dashboard" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <VerifierDashboard />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/contracts" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <MyContracts />
-          </ProtectedLayout>
-        </ProtectedRoute>
-      } />
-
-      <Route path="/settings" element={
-        <ProtectedRoute>
-          <ProtectedLayout>
-            <Settings />
-          </ProtectedLayout>
+          <Dashboard />
         </ProtectedRoute>
       } />
 
@@ -246,55 +113,3 @@ function App() {
 }
 
 export default App;
-
-
-
-
-// {user?.kyc_verified === 'verified' ? <WorkerDashboard /> : (
-//               <div className="p-8 text-center">
-//                 <h2 className="text-2xl font-bold mb-4">KYC Verification Required</h2>
-//                 <p className="text-muted-foreground mb-4">
-//                   Please complete your KYC verification to access the worker dashboard.
-//                 </p>
-//                 <Button onClick={() => window.location.href = '/verify/kyc'}>
-//                   Complete KYC Verification
-//                 </Button>
-//               </div>
-//             )}
-
-
-// {user?.kyc_verified === 'verified' ? <CreateJob /> : (
-//               <div className="p-8 text-center">
-//                 <h2 className="text-2xl font-bold mb-4">KYC Verification Required</h2>
-//                 <p className="text-muted-foreground mb-4">
-//                   Please complete your KYC verification to create jobs.
-//                 </p>
-//                 <Button onClick={() => window.location.href = '/verify/kyc'}>
-//                   Complete KYC Verification
-//                 </Button>
-//               </div>
-//             )}
-
-// {user?.kyc_verified === 'verified' ? <JobsList /> : (
-//               <div className="p-8 text-center">
-//                 <h2 className="text-2xl font-bold mb-4">KYC Verification Required</h2>
-//                 <p className="text-muted-foreground mb-4">
-//                   Please complete your KYC verification to access job listings.
-//                 </p>
-//                 <Button onClick={() => window.location.href = '/verify/kyc'}>
-//                   Complete KYC Verification
-//                 </Button>
-//               </div>
-//             )}
-
-// {user?.kyc_verified === 'verified' ? <EmployerDashboard /> : (
-//               <div className="p-8 text-center">
-//                 <h2 className="text-2xl font-bold mb-4">KYC Verification Required</h2>
-//                 <p className="text-muted-foreground mb-4">
-//                   Please complete your KYC verification to access the employer dashboard.
-//                 </p>
-//                 <Button onClick={() => window.location.href = '/verify/kyc'}>
-//                   Complete KYC Verification
-//                 </Button>
-//               </div>
-//             )}
