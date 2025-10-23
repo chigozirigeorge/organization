@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { AlertCircle, DollarSign, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { Job } from '../types/labour';
+import { useNavigate } from 'react-router-dom';
 
 interface JobApplicationProps {
   job: Job;
@@ -25,6 +26,7 @@ export const JobApplication = ({ job, onSuccess, onCancel }: JobApplicationProps
     estimated_completion: '',
     cover_letter: ''
   });
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +53,7 @@ export const JobApplication = ({ job, onSuccess, onCancel }: JobApplicationProps
 
       toast.success('Application submitted successfully!');
       onSuccess();
+      navigate('/dashboard/my-jobs');
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit application');
     } finally {

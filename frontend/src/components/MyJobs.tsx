@@ -83,36 +83,8 @@ export const MyJobs = () => {
           setJobs([]);
         }
       } else {
-        // For workers, fetch their applications
-        try {
-          // First, try to get applications from worker dashboard
-          const dashboardResponse = await fetch('https://verinest.up.railway.app/api/labour/worker/dashboard', {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (dashboardResponse.ok) {
-            const dashboardData = await dashboardResponse.json();
-            console.log('Worker dashboard data:', dashboardData);
-            
-            if (dashboardData.data && dashboardData.data.pending_applications) {
-              setApplications(dashboardData.data.pending_applications);
-            } else if (dashboardData.pending_applications) {
-              setApplications(dashboardData.pending_applications);
-            } else {
-              // If no applications in dashboard, try to fetch all applications
-              await fetchWorkerApplications();
-            }
-          } else {
-            // Fallback to fetching applications directly
-            await fetchWorkerApplications();
-          }
-        } catch (error) {
-          console.error('Error fetching worker dashboard:', error);
-          await fetchWorkerApplications();
-        }
+        // For workers, fetch their applications using the updated method
+        await fetchWorkerApplications();
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -126,14 +98,56 @@ export const MyJobs = () => {
 
   const fetchWorkerApplications = async () => {
     try {
-      // This is a fallback - you might need to create an endpoint for this
-      // For now, we'll show a message that applications need to be implemented
-      console.log('Worker applications endpoint not implemented yet');
-      setApplications([]);
-      toast.info('Applications feature coming soon');
+      // Use the worker dashboard endpoint to get applications
+      const response = await fetch('https://verinest.up.railway.app/api/labour/worker/dashboard', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Worker applications data:', data);
+        
+        // Extract applications from the dashboard response
+        if (data.data) {
+          const rawApplications = data.data.pending_applications || [];
+          
+          // Format applications for display
+          if (rawApplications.length > 0) {
+            const formattedApplications = rawApplications.map((app: any) => ({
+              id: app.id,
+              job_id: app.job_id,
+              proposed_rate: app.proposed_rate,
+              estimated_completion: app.estimated_completion,
+              cover_letter: app.cover_letter,
+              status: app.status || 'pending',
+              created_at: app.created_at,
+              job: app.job || {
+                title: 'Job Application',
+                description: app.cover_letter || 'No description available',
+                budget: app.proposed_rate,
+                location_city: 'Unknown',
+                location_state: 'Unknown',
+                estimated_duration_days: app.estimated_completion,
+                category: 'General'
+              }
+            }));
+            setApplications(formattedApplications);
+          } else {
+            setApplications([]);
+          }
+        } else {
+          setApplications([]);
+        }
+      } else {
+        throw new Error('Failed to fetch applications');
+      }
     } catch (error) {
       console.error('Error fetching worker applications:', error);
       setApplications([]);
+      toast.error('Failed to load your applications');
     }
   };
 
@@ -192,7 +206,7 @@ export const MyJobs = () => {
         </div>
         {activeTab === 'employer' && (
           <Button asChild>
-            <Link to="/jobs/create">
+            <Link to="/dashboard/jobs/create">
               <Plus className="h-4 w-4 mr-2" />
               Post New Job
             </Link>
@@ -238,7 +252,7 @@ export const MyJobs = () => {
                     You haven't posted any jobs yet. Start by creating your first job posting.
                   </p>
                   <Button asChild>
-                    <Link to="/jobs/create">Post Your First Job</Link>
+                    <Link to="/dashboard/jobs/create">Post Your First Job</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -251,7 +265,7 @@ export const MyJobs = () => {
                     <div className="space-y-2">
                       <CardTitle className="text-xl">
                         <Link 
-                          to={`/jobs/${job.id}`}
+                          to={`/dashboard/jobs/${job.id}`}
                           className="hover:text-primary transition-colors"
                         >
                           {job.title}
@@ -299,13 +313,13 @@ export const MyJobs = () => {
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" asChild>
-                        <Link to={`/jobs/${job.id}`}>
+                        <Link to={`/dashboard/jobs/${job.id}`}>
                           View Details
                         </Link>
                       </Button>
                       {job.status === 'open' && (
                         <Button variant="outline" size="sm" asChild>
-                          <Link to={`/jobs/${job.id}/applications`}>
+                          <Link to={`/dashboard/jobs/${job.id}/applications`}>
                             View Applications
                           </Link>
                         </Button>
@@ -323,19 +337,14 @@ export const MyJobs = () => {
           {applications.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
-                <div className="text-muted-foreground">
+                <div className="text-center text-muted-foreground">
                   <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <h3 className="text-lg font-semibold">
-                    {activeTab === 'worker' ? 'No applications yet' : 'Applications feature'}
-                  </h3>
+                  <h3 className="text-lg font-semibold">No applications yet</h3>
                   <p className="mb-4">
-                    {activeTab === 'worker' 
-                      ? 'You haven\'t applied for any jobs yet. Browse available jobs to get started.'
-                      : 'Job applications tracking is coming soon.'
-                    }
+                    You haven't applied for any jobs yet. Browse available jobs to get started.
                   </p>
                   <Button asChild>
-                    <Link to="/jobs">Browse Jobs</Link>
+                    <Link to="/dashboard/jobs">Browse Jobs</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -348,22 +357,22 @@ export const MyJobs = () => {
                     <div className="space-y-2">
                       <CardTitle className="text-xl">
                         <Link 
-                          to={`/jobs/${application.job_id}`}
+                          to={`/dashboard/jobs/${application.job_id}`}
                           className="hover:text-primary transition-colors"
                         >
                           {application.job?.title || 'Job Application'}
                         </Link>
                       </CardTitle>
                       <CardDescription className="line-clamp-2">
-                        {application.job?.description || 'Job details not available'}
+                        {application.job?.description || application.cover_letter || 'No description available'}
                       </CardDescription>
                     </div>
                     <div className="text-right space-y-2">
                       <Badge variant={getApplicationStatusVariant(application.status)}>
-                        {application.status}
+                        {application.status || 'pending'}
                       </Badge>
                       <div className="text-2xl font-bold text-primary">
-                        {formatCurrency(application.proposed_rate)}
+                        {formatCurrency(application.proposed_rate || 0)}
                       </div>
                     </div>
                   </div>
@@ -402,20 +411,22 @@ export const MyJobs = () => {
                         </p>
                       </div>
                       
-                      <div>
-                        <p className="text-sm font-medium mb-1">Cover Letter</p>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {application.cover_letter}
-                        </p>
-                      </div>
+                      {application.cover_letter && (
+                        <div>
+                          <p className="text-sm font-medium mb-1">Cover Letter</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {application.cover_letter}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex justify-between items-center mt-4">
                       <div className="text-sm text-muted-foreground">
-                        Job Budget: {formatCurrency(application.job?.budget || 0)}
+                        Job Budget: {formatCurrency(application.job?.budget || application.proposed_rate || 0)}
                       </div>
                       <Button variant="outline" size="sm" asChild>
-                        <Link to={`/jobs/${application.job_id}`}>
+                        <Link to={`/dashboard/jobs/${application.job_id}`}>
                           View Job Details
                         </Link>
                       </Button>

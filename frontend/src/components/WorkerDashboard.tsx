@@ -4,12 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { MapPin, Calendar, DollarSign, Clock, TrendingUp } from 'lucide-react';
+import { MapPin, Calendar, DollarSign, Clock, TrendingUp, Briefcase, ImageIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Job, Contract, JobApplication } from '../types/labour';
 
 export const WorkerDashboard = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [stats, setStats] = useState({
     totalApplications: 0,
     activeContracts: 0,
@@ -25,38 +25,65 @@ export const WorkerDashboard = () => {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      setError(null);
-      const response = await fetch('https://verinest.up.railway.app/api/labour/worker/dashboard', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  // In WorkerDashboard.tsx - Update the fetchDashboardData function
+const fetchDashboardData = async () => {
+  try {
+    setError(null);
+    const response = await fetch('https://verinest.up.railway.app/api/labour/worker/dashboard', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📊 Dashboard API Response:', data); // Debug log
-        
-        // Safely set stats with defaults
+    if (response.ok) {
+      const data = await response.json();
+      console.log('📊 Worker Dashboard API Response:', data);
+      
+      // Handle the actual API response structure from your backend
+      if (data.data) {
+        const dashboardData = data.data;
+
+        // Calculate stats from the actual data structure
+          const totalApplications = dashboardData.pending_applications?.length || 0;
+          const activeContracts = dashboardData.active_jobs?.length || 0;
+
+
         setStats({
-          totalApplications: data.stats?.totalApplications || data.totalApplications || 0,
-          activeContracts: data.stats?.activeContracts || data.activeContracts || 0,
-          completedJobs: data.stats?.completedJobs || data.completedJobs || 0,
-          totalEarnings: data.stats?.totalEarnings || data.totalEarnings || 0,
+          totalApplications,
+          activeContracts,
+          completedJobs: dashboardData.completed_jobs || 0,
+          totalEarnings: dashboardData.total_earnings || 0,
         });
-        
-        setRecentApplications(data.recentApplications || []);
-        setActiveContracts(data.activeContracts || []);
+        setRecentApplications(dashboardData.pending_applications || []);
+        setActiveContracts(dashboardData.active_contracts || []);
       } else {
-        throw new Error(`Failed to fetch dashboard data: ${response.status}`);
+        // Fallback structure
+        setStats({
+          totalApplications: data.pending_applications?.length || 0,
+          activeContracts: data.active_contracts?.length || data.active_jobs?.length || 0,
+          completedJobs: data.completed_jobs || 0,
+          totalEarnings: data.total_earnings || 0,
+        });
+        setRecentApplications(data.pending_applications || []);
+        setActiveContracts(data.active_contracts || data.active_jobs || []);
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      setError('Failed to load dashboard data. Please try again.');
-    } finally {
-      setLoading(false);
+    } else {
+      throw new Error(`Failed to fetch dashboard data: ${response.status}`);
     }
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error);
+    setError('Failed to load dashboard data. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0,
+    }).format(amount);
   };
 
   if (loading) {
@@ -91,35 +118,44 @@ export const WorkerDashboard = () => {
           <h1 className="text-3xl font-bold">Worker Dashboard</h1>
           <p className="text-muted-foreground">Manage your jobs and applications</p>
         </div>
-        <Button asChild>
-          <Link to="/jobs">Browse Jobs</Link>
-        </Button>
+        <div className="flex gap-3">
+          <Button asChild variant="outline">
+            <Link to="/dashboard/worker/portfolio">
+              <ImageIcon className="h-4 w-4 mr-2" />
+              My Portfolio
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/dashboard/jobs">Browse Jobs</Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Quick Stats */}
+      {/* Stats Grid - Updated to show actual data */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Applications</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Applications</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalApplications}</div>
             <p className="text-xs text-muted-foreground">
-              Job applications submitted
+              Applications awaiting response
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.activeContracts}</div>
             <p className="text-xs text-muted-foreground">
-              Ongoing jobs
+              Currently working
             </p>
           </CardContent>
         </Card>
@@ -143,7 +179,6 @@ export const WorkerDashboard = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {/* FIXED: Safely handle totalEarnings with proper null check */}
             <div className="text-2xl font-bold">₦{(stats.totalEarnings || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Lifetime earnings
@@ -159,37 +194,48 @@ export const WorkerDashboard = () => {
             <CardTitle>Recent Applications</CardTitle>
             <CardDescription>
               Your most recent job applications
+              {recentApplications.length > 0 && (
+                <Button asChild variant="outline" size="sm" className="ml-4">
+                  <Link to="/dashboard/my-jobs">View All</Link>
+                </Button>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {recentApplications.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
+                  <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No applications yet</p>
-                  <Button asChild variant="outline" className="mt-4">
-                    <Link to="/jobs">Browse Jobs</Link>
+                  <p className="text-sm mb-4">Start by applying to available jobs</p>
+                  <Button asChild variant="outline">
+                    <Link to="/dashboard/jobs">Browse Jobs</Link>
                   </Button>
                 </div>
               ) : (
                 recentApplications.slice(0, 5).map((application) => (
-                  <div key={application.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="space-y-1">
-                      <p className="font-medium">{application.cover_letter}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {/* FIXED: Safely handle proposed_rate */}
-                        <span>₦{(application.proposed_rate || 0).toLocaleString()}</span>
-                        {/* FIXED: Safely handle estimated_completion */}
-                        <span>{(application.estimated_completion || 0)} days</span>
+                  <div key={application.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                    <div className="space-y-1 flex-1">
+                      <p className="font-medium text-sm">{application.job?.title || 'Job Application'}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{formatCurrency(application.proposed_rate || 0)}</span>
+                        <span>{application.estimated_completion || 0} days</span>
                         <Badge variant={
                           application.status === 'accepted' ? 'default' : 
                           application.status === 'rejected' ? 'destructive' : 'secondary'
-                        }>
+                        } className="text-xs">
                           {application.status}
                         </Badge>
                       </div>
+                      {application.job && (
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {application.job.location_city}, {application.job.location_state}
+                        </div>
+                      )}
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/jobs/${application.job_id}`}>View</Link>
+                      <Link to={`/dashboard/jobs/${application.job_id}`}>View</Link>
                     </Button>
                   </div>
                 ))
@@ -210,24 +256,33 @@ export const WorkerDashboard = () => {
             <div className="space-y-4">
               {activeContracts.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No active contracts</p>
+                  <p className="text-sm">When you get hired, your contracts will appear here</p>
                 </div>
               ) : (
                 activeContracts.slice(0, 5).map((contract) => (
-                  <div key={contract.id} className="p-3 border rounded-lg">
+                  <div key={contract.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
                     <div className="space-y-2">
-                      <p className="font-medium">{contract.job?.title || 'Untitled Job'}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {/* FIXED: Safely handle agreed_rate */}
-                        <span>₦{(contract.agreed_rate || 0).toLocaleString()}</span>
-                        {/* FIXED: Safely handle agreed_timeline */}
-                        <span>{(contract.agreed_timeline || 0)} days</span>
-                        <Badge variant="outline">{contract.status}</Badge>
+                      <p className="font-medium text-sm">{contract.job?.title || 'Untitled Job'}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{formatCurrency(contract.agreed_rate || 0)}</span>
+                        <span>{contract.agreed_timeline || 0} days</span>
+                        <Badge variant="outline" className="text-xs">{contract.status}</Badge>
                       </div>
-                      <div className="flex items-center text-sm">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        {/* FIXED: Safely handle job location */}
-                        {contract.job?.location_city || 'Unknown'}, {contract.job?.location_state || 'Unknown'}
+                      {contract.job && (
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {contract.job.location_city || 'Unknown'}, {contract.job.location_state || 'Unknown'}
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-muted-foreground">
+                          Started {contract.created_at ? new Date(contract.created_at).toLocaleDateString() : 'Recently'}
+                        </span>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to={`/dashboard/contracts/${contract.id}`}>Details</Link>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -237,6 +292,74 @@ export const WorkerDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>
+            Quickly access important features
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button asChild variant="outline" className="h-16 flex flex-col">
+              <Link to="/dashboard/jobs">
+                <Briefcase className="h-5 w-5 mb-2" />
+                <span className="text-sm">Browse Jobs</span>
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-16 flex flex-col">
+              <Link to="/dashboard/worker/portfolio">
+                <ImageIcon className="h-5 w-5 mb-2" />
+                <span className="text-sm">My Portfolio</span>
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-16 flex flex-col">
+              <Link to="/dashboard/my-jobs">
+                <TrendingUp className="h-5 w-5 mb-2" />
+                <span className="text-sm">My Applications</span>
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Profile Completion Status */}
+      {user && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardHeader>
+            <CardTitle className="text-blue-900">Profile Status</CardTitle>
+            <CardDescription className="text-blue-700">
+              Complete your profile to get more job opportunities
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-900">Basic Profile</span>
+                <Badge variant="default" className="bg-green-500">
+                  Complete
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-900">Portfolio</span>
+                <Button asChild variant="link" className="p-0 h-auto text-blue-600">
+                  <Link to="/dashboard/worker/portfolio">
+                    {recentApplications.length > 0 ? 'Add Items' : 'Set Up'}
+                  </Link>
+                </Button>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-900">Verification</span>
+                <Badge variant="outline" className="text-orange-500 border-orange-300">
+                  {user.kyc_verified === 'verified' ? 'Verified' : 'Pending'}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

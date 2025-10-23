@@ -127,16 +127,16 @@ export const JobsList = () => {
 
       if (!profileResponse.ok) {
         toast.error('Please create a worker profile before applying to jobs');
-        navigate('/create-profile');
+        navigate('/dashboard/worker/profile-setup');
         return;
       }
 
-      navigate(`/jobs/${jobId}/apply`);
+      navigate(`/dashboard/jobs/${jobId}/apply`);
       
     } catch (error) {
       console.error('Error checking profile:', error);
       toast.error('Please create a worker profile before applying to jobs');
-      navigate('/create-profile');
+      navigate('/dashboard/worker/profile-setup');
     }
   };
 
@@ -288,7 +288,7 @@ export const JobsList = () => {
                 <div className="flex justify-between items-start mb-2">
                   <CardTitle className="text-lg leading-tight group-hover:text-primary transition-colors">
                     <Link 
-                          to={`/jobs/${job.id}`}
+                          to={`/dashboard/jobs/${job.id}`}
                           className="hover:text-primary transition-colors"
                         >
                           {job.title}

@@ -1,23 +1,25 @@
-// components/JobDetails.tsx
+// components/JobDetails.tsx - UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { MapPin, Calendar, DollarSign, Clock, User, ArrowLeft, Building, Phone, Mail, Shield } from 'lucide-react';
+import { MapPin, Calendar, DollarSign, Clock, User, ArrowLeft, Building, Shield, Users, FileText, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { WorkerProfileModal } from './WorkerPortfolioModal';
+import { extractWorkerCategory, extractWorkerEmail, extractWorkerExperience, extractWorkerName } from '@/types/labour';
 
 interface Job {
   id: string;
   title: string;
   description: string;
   category: string;
-  budget: number;
+  budget?: number;
   location_state: string;
   location_city: string;
-  location_address: string;
-  estimated_duration_days: number;
+  location_address?: string;
+  estimated_duration_days?: number;
   created_at: string;
   status: string;
   employer_id: string;
@@ -26,12 +28,42 @@ interface Job {
     name: string;
     email: string;
     phone?: string;
-    trust_score: number;
+    trust_score?: number;
     verified: boolean;
   };
   partial_payment_allowed: boolean;
   partial_payment_percentage?: number;
   deadline?: string;
+  applications_count?: number;
+}
+
+interface WorkerUserResponse {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface WorkerProfileApplicationResponse {
+  category: string;
+  experience_years: number;
+  description: string;
+  hourly_rate: number;
+  daily_rate: number;
+  location_state: string;
+  location_city: string;
+  skills: string[];
+}
+
+interface JobApplication {
+  id: string;
+  worker_id: string;
+  worker?: WorkerUserResponse | null;
+  worker_profile?: WorkerProfileApplicationResponse | null;
+  proposed_rate: number;
+  estimated_completion: number;
+  cover_letter: string;
+  status: string;
+  created_at: string;
 }
 
 export const JobDetails = () => {
@@ -39,19 +71,40 @@ export const JobDetails = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [job, setJob] = useState<Job | null>(null);
+  const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
+  const [showApplications, setShowApplications] = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const [showWorkerModal, setShowWorkerModal] = useState(false);
+
+  // Check if current user is the job owner
+  const isJobOwner = user?.id === job?.employer_id;
+  const isWorker = user?.role === 'worker';
 
   useEffect(() => {
-    if (id) {
-      fetchJobDetails();
+    console.log('🔄 [JobDetails] useEffect triggered');
+    
+    // Extract ID from URL if useParams doesn't work
+    const pathSegments = window.location.pathname.split('/');
+    const extractedId = pathSegments[3];
+    const finalId = id || extractedId;
+    
+    if (finalId) {
+      fetchJobDetails(finalId);
+    } else {
+      console.error('❌ [JobDetails] No job ID found');
+      toast.error('Invalid job URL');
+      navigate('/dashboard/jobs');
     }
-  }, [id]);
+  }, [id, navigate]);
 
-  const fetchJobDetails = async () => {
+  const fetchJobDetails = async (jobId: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${id}`, {
+      console.log('🔍 [JobDetails] Fetching job details for ID:', jobId);
+      
+      const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}`, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -62,26 +115,111 @@ export const JobDetails = () => {
       }
 
       const data = await response.json();
+      console.log('📋 [JobDetails] API response:', data);
       
       // Handle different response structures
       const jobData = data.data || data.job || data;
+      
+      if (!jobData) {
+        throw new Error('No job data received from server');
+      }
+
       setJob(jobData);
 
+      // If user is the job owner, fetch applications
+      if (user?.id === jobData.employer_id) {
+        fetchJobApplications(jobId);
+      }
+
     } catch (error) {
-      console.error('Failed to fetch job details:', error);
+      console.error('❌ [JobDetails] Failed to fetch job details:', error);
       toast.error('Failed to load job details. Please try again.');
-      navigate('/jobs');
+      navigate('/dashboard/jobs');
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchJobApplications = async (jobId: string) => {
+  try {
+    console.log('📥 [JobDetails] Fetching applications for job:', jobId);
+    
+    const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('🔍 [JobDetails] FULL Applications API Response:', data);
+      
+      // Log each application to see the complete structure
+      if (data.data && data.data.length > 0) {
+        data.data.forEach((app: any, index: number) => {
+          console.log(`📋 Application ${index + 1}:`, app);
+          console.log(`👤 Worker data in app ${index + 1}:`, app.worker);
+          console.log('---');
+        });
+      }
+      
+      setApplications(data.data || data.applications || []);
+    } else {
+      console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
+      const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
+    }
+  } catch (error) {
+    console.error('❌ [JobDetails] Error fetching applications:', error);
+  }
+};
+
+ const handleViewWorkerProfile = (workerId: string) => {
+    setSelectedWorker(workerId);
+    setShowWorkerModal(true);
+  };
+
+  // Update the handleAcceptApplication function
+  const handleAcceptApplication = async (applicationId: string, workerId: string) => {
+    try {
+      console.log('✅ [JobDetails] Accepting application:', applicationId);
+      
+      const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job?.id}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          worker_id: workerId,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Worker assigned successfully!');
+        // Refresh applications
+        if (job?.id) {
+          fetchJobApplications(job.id);
+        }
+        setShowWorkerModal(false);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to assign worker');
+      }
+    } catch (error: any) {
+      console.error('❌ [JobDetails] Error accepting application:', error);
+      toast.error(error.message || 'Failed to assign worker');
+    }
+  };
+
 
   const handleApply = async () => {
     if (!user || !token) {
       toast.info('Please log in to apply for this job');
       navigate('/login', { 
         state: { 
-          returnTo: `/jobs/${id}`,
+          returnTo: `/dashboard/jobs/${id}`,
           message: 'Log in to apply for this job'
         } 
       });
@@ -106,12 +244,13 @@ export const JobDetails = () => {
 
       if (!profileResponse.ok) {
         toast.error('Please create a worker profile before applying to jobs');
-        navigate('/create-profile');
+        navigate('/dashboard/worker/profile');
         return;
       }
 
       // Navigate to application form
-      navigate(`/jobs/${id}/apply`);
+      const jobId = id || window.location.pathname.split('/')[3];
+      navigate(`/dashboard/jobs/${jobId}/apply`);
       
     } catch (error) {
       console.error('Error applying for job:', error);
@@ -122,42 +261,26 @@ export const JobDetails = () => {
   };
 
   const isJobOpen = React.useMemo(() => {
-  if (!job) return false;
-  
-  const isOpenByStatus = job.status?.toLowerCase() === 'open';
-  const isBeforeDeadline = job.deadline ? new Date() < new Date(job.deadline) : true;
-  
-  return isOpenByStatus && isBeforeDeadline;
-}, [job]);
-
-useEffect(() => {
-  if (job) {
-    console.log('🔍 Job data in JobDetails:', job);
-    console.log('🔍 Job status:', job.status);
-    console.log('🔍 Job deadline:', job.deadline);
-    console.log('🔍 Current time:', new Date().toISOString());
+    if (!job) return false;
     
-    // Check if job is still open based on status and deadline
     const isOpenByStatus = job.status?.toLowerCase() === 'open';
     const isBeforeDeadline = job.deadline ? new Date() < new Date(job.deadline) : true;
-    const isJobOpen = isOpenByStatus && isBeforeDeadline;
     
-    console.log('🔍 Is open by status:', isOpenByStatus);
-    console.log('🔍 Is before deadline:', isBeforeDeadline);
-    console.log('🔍 Final isJobOpen:', isJobOpen);
-  }
-}, [job]);
+    return isOpenByStatus && isBeforeDeadline;
+  }, [job]);
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | undefined) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount || 0);
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'Not specified';
+
     return new Date(dateString).toLocaleDateString('en-NG', {
       year: 'numeric',
       month: 'long',
@@ -165,14 +288,270 @@ useEffect(() => {
     });
   };
 
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-NG', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+
+ // In JobDetails.tsx - Update the renderApplicationsSection function
+// In JobDetails.tsx - Update the renderApplicationsSection function
+const renderApplicationsSection = () => {
+  if (!isJobOwner || !applications.length) return null;
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Job Applications
+            <Badge variant="secondary">
+              {applications.length} application{applications.length !== 1 ? 's' : ''}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Review applications from workers. Click "View Profile" to see worker details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {applications.map((application: any) => {
+              const workerName = extractWorkerName(application.worker, application.worker_profile, application.worker_id);
+              const workerEmail = extractWorkerEmail(application.worker);
+              const experienceYears = extractWorkerExperience(application.worker_profile);
+              const workerCategory = extractWorkerCategory(application.worker_profile);
+
+              const hasProfileData = application.worker_profile !== null;
+
+              return (
+                <Card key={application.id} className="p-4 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-3 flex-1">
+                      {/* Worker Info */}
+                      <div className="flex items-center gap-3">
+                        <div className="bg-primary/10 p-2 rounded-full">
+                          <User className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{workerName}</p>
+                          <div className="text-sm text-muted-foreground">
+                            <p>{workerEmail}</p>
+                            {experienceYears > 0 && (
+                              <p>{experienceYears} years experience • {workerCategory}</p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge variant={
+                          application.status === 'accepted' ? 'default' : 
+                          application.status === 'rejected' ? 'destructive' : 'secondary'
+                        }>
+                          {application.status || 'pending'}
+                        </Badge>
+                      </div>
+
+                      {/* Application Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div className="flex items-center">
+                          <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <span>Proposed: {formatCurrency(application.proposed_rate)}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <span>Estimate: {application.estimated_completion} days</span>
+                        </div>
+                      </div>
+
+                      {/* Cover Letter */}
+                      <div>
+                        <p className="text-sm font-medium mb-1">Cover Letter:</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-slate-50 p-3 rounded">
+                          {application.cover_letter}
+                        </p>
+                      </div>
+
+                      {/* Profile Availability Indicator */}
+                      {!hasProfileData && (
+                        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                          <span className="text-xs">ℹ️</span>
+                          <span>Full profile not available - basic contact information shown</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    {application.status === 'pending' && (
+                      <div className="flex flex-col gap-2 ml-4">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedWorker(application.worker_id);
+                            setShowWorkerModal(true);
+                          }}
+                          variant="outline"
+                          className="flex items-center gap-1"
+                        >
+                          <User className="h-3 w-3" />
+                          View Profile
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAcceptApplication(application.id, application.worker_id)}
+                          className="flex items-center gap-1"
+                        >
+                          <Users className="h-3 w-3" />
+                          Accept & Assign
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
+                        >
+                          <X className="h-3 w-3" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Worker Profile Modal - Pass both worker data and profile */}
+      <WorkerProfileModal
+        workerId={selectedWorker || ''}
+        workerData={applications.find(app => app.worker_id === selectedWorker)?.worker || null}
+        workerProfile={applications.find(app => app.worker_id === selectedWorker)?.worker_profile || null}
+        isOpen={showWorkerModal}
+        onClose={() => {
+          setShowWorkerModal(false);
+          setSelectedWorker(null);
+        }}
+        onAssign={(workerId) => {
+          const application = applications.find(app => app.worker_id === workerId);
+          if (application) {
+            handleAcceptApplication(application.id, workerId);
+          }
+        }}
+        jobId={job?.id}
+      />
+    </>
+  );
+};
+
+  // Render apply section for workers (not job owners)
+const renderApplySection = () => {
+  if (isJobOwner || !isWorker || !job) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Apply for this Job</CardTitle>
+        <CardDescription>
+          {isJobOpen 
+            ? 'Submit your application for this opportunity'
+            : 'This job is no longer accepting applications'
+          }
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isJobOpen ? (
+          <>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Job Budget:</span>
+                <span className="font-semibold">{formatCurrency(job.budget || 0)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Duration:</span>
+                <span>{job.estimated_duration_days || 0} days</span>
+              </div>
+              {job.deadline && (
+                <div className="flex justify-between text-sm">
+                  <span>Deadline:</span>
+                  <span>{formatDate(job.deadline)}</span>
+                </div>
+              )}
+            </div>
+
+            {!user ? (
+              <Button className="w-full" size="lg" onClick={handleApply}>
+                Log In to Apply
+              </Button>
+            ) : !user.email_verified ? (
+              <Button className="w-full" size="lg" variant="outline" onClick={handleApply}>
+                Verify Email to Apply
+              </Button>
+            ) : (
+              <Button 
+                className="w-full" 
+                size="lg" 
+                onClick={handleApply}
+                disabled={applying}
+              >
+                {applying ? 'Applying...' : 'Apply Now'}
+              </Button>
+            )}
+          </>
+        ) : (
+          <div className="text-center space-y-3">
+            <Button className="w-full" size="lg" disabled>
+              Job {job.status?.replace('_', ' ') || 'Closed'}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {job.deadline && new Date() > new Date(job.deadline) 
+                ? 'The application deadline has passed'
+                : 'This job is no longer accepting applications'
+              }
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+  // Render job management section for job owners
+  const renderJobManagementSection = () => {
+    if (!isJobOwner) return null;
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Manage This Job</CardTitle>
+          <CardDescription>
+            Job management tools and statistics
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Applications Received:</span>
+              <span className="font-semibold">{applications.length}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Job Status:</span>
+              <Badge variant={isJobOpen ? 'default' : 'secondary'}>
+                {job?.status?.replace('_', ' ') || 'Unknown'}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              onClick={() => setShowApplications(!showApplications)}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              {showApplications ? 'Hide Applications' : 'View Applications'}
+            </Button>
+            <Button variant="outline" className="flex-1">
+              <FileText className="h-4 w-4 mr-2" />
+              Edit Job
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   if (loading) {
@@ -210,7 +589,7 @@ useEffect(() => {
             <h1 className="text-2xl font-bold text-muted-foreground mb-4">Job Not Found</h1>
             <p className="text-muted-foreground mb-6">The job you're looking for doesn't exist or has been removed.</p>
             <Button asChild>
-              <Link to="/jobs">Back to Jobs</Link>
+              <Link to="/dashboard/jobs">Back to Jobs</Link>
             </Button>
           </div>
         </div>
@@ -223,13 +602,20 @@ useEffect(() => {
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="icon" onClick={() => navigate('/dashboard')}>
+          <Button variant="outline" size="icon" onClick={() => navigate('/dashboard/jobs')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Job Details</h1>
-            <p className="text-muted-foreground">Complete information about this job opportunity</p>
+            <p className="text-muted-foreground">
+              {isJobOwner ? 'Manage your job posting' : 'Complete information about this job opportunity'}
+            </p>
           </div>
+          {isJobOwner && (
+            <Badge variant="default" className="ml-auto">
+              Your Job
+            </Badge>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -250,6 +636,11 @@ useEffect(() => {
                       </Badge>
                       {job.deadline && new Date() > new Date(job.deadline) && (
                         <Badge variant="destructive">Deadline Passed</Badge>
+                      )}
+                      {isJobOwner && (
+                        <Badge variant="outline">
+                          {applications.length} applications
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -304,7 +695,7 @@ useEffect(() => {
                       <Calendar className="h-4 w-4 mr-3 text-muted-foreground" />
                       <div>
                         <p className="font-medium">Application Deadline</p>
-                        <p className="text-muted-foreground">{formatDateTime(job.deadline)}</p>
+                        <p className="text-muted-foreground">{formatDate(job.deadline)}</p>
                       </div>
                     </div>
                   )}
@@ -326,6 +717,9 @@ useEffect(() => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Show applications if job owner and showApplications is true */}
+            {isJobOwner && showApplications && renderApplicationsSection()}
 
             {/* Employer Information */}
             {job.employer && (
@@ -367,71 +761,8 @@ useEffect(() => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Apply Card */}
-           <Card>
-        <CardHeader>
-          <CardTitle>Apply for this Job</CardTitle>
-          <CardDescription>
-            {isJobOpen 
-              ? 'Submit your application for this opportunity'
-              : 'This job is no longer accepting applications'
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isJobOpen ? (
-      <>
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Job Budget:</span>
-            <span className="font-semibold">{formatCurrency(job.budget)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Duration:</span>
-            <span>{job.estimated_duration_days} days</span>
-          </div>
-          {job.deadline && (
-            <div className="flex justify-between text-sm">
-              <span>Deadline:</span>
-              <span>{formatDate(job.deadline)}</span>
-            </div>
-          )}
-        </div>
-
-        {!user ? (
-          <Button className="w-full" size="lg" onClick={handleApply}>
-            Log In to Apply
-          </Button>
-        ) : !user.email_verified ? (
-          <Button className="w-full" size="lg" variant="outline" onClick={handleApply}>
-            Verify Email to Apply
-          </Button>
-        ) : (
-          <Button 
-            className="w-full" 
-            size="lg" 
-            onClick={handleApply}
-            disabled={applying}
-          >
-            {applying ? 'Applying...' : 'Apply Now'}
-          </Button>
-        )}
-      </>
-    ) : (
-      <div className="text-center space-y-3">
-        <Button className="w-full" size="lg" disabled>
-          Job {job.status?.replace('_', ' ') || 'Closed'}
-        </Button>
-        <p className="text-sm text-muted-foreground">
-          {job.deadline && new Date() > new Date(job.deadline) 
-            ? 'The application deadline has passed'
-            : 'This job is no longer accepting applications'
-          }
-        </p>
-      </div>
-    )}
-  </CardContent>
-</Card>
+            {/* Show job management for owners, apply section for workers */}
+            {isJobOwner ? renderJobManagementSection() : renderApplySection()}
 
             {/* Job Summary */}
             <Card>
@@ -461,22 +792,6 @@ useEffect(() => {
                     <span className="text-sm font-medium">Partial Payments OK</span>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Safety Tips */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Shield className="h-4 w-4" />
-                  Safety Tips
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-2">
-                <p>• Always meet in public places first</p>
-                <p>• Never pay upfront for any job</p>
-                <p>• Verify employer identity</p>
-                <p>• Use platform messaging for communication</p>
               </CardContent>
             </Card>
           </div>

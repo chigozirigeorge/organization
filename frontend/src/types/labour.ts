@@ -42,25 +42,84 @@ export interface Job {
 }
 
 export interface JobApplication {
-  id: string;
+  // id: string;
   job_id: string;
   worker_id: string;
+  worker?: WorkerUserResponse | null;
+  worker_profile?: WorkerProfileApplicationResponse | null;
   proposed_rate: number;
   estimated_completion: number;
   cover_letter: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: string;
   created_at: string;
-  updated_at: string;
-  job?: Job; 
-  worker: {
-    id: string;
-    user: {
-      name: string;
-      username: string;
-    };
-    profile: WorkerProfile;
-  };
+  job: Job;
 }
+
+export interface WorkerUserResponse {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface WorkerProfileApplicationResponse {
+  id?: string;
+  user_id?: string;
+  category?: string;
+  experience_years?: number;
+  description?: string;
+  hourly_rate?: number;
+  daily_rate?: number;
+  location_state?: string;
+  location_city?: string;
+  skills?: string[];
+  rating?: number;
+}
+
+// Helper functions with proper null handling
+export const extractWorkerName = (
+  worker: WorkerUserResponse | null | undefined, 
+  workerProfile: WorkerProfileApplicationResponse | null | undefined,
+  workerId: string
+): string => {
+  if (worker?.name) return worker.name;
+  if (workerProfile?.user_id) return `Worker ${workerProfile.user_id.substring(0, 8)}`;
+  return `Worker ${workerId.substring(0, 8)}`;
+};
+
+export const extractWorkerEmail = (worker: WorkerUserResponse | null | undefined): string => {
+  return worker?.email || 'Email not available';
+};
+
+export const extractWorkerExperience = (workerProfile: WorkerProfileApplicationResponse | null | undefined): number => {
+  return workerProfile?.experience_years || 0;
+};
+
+export const extractWorkerCategory = (workerProfile: WorkerProfileApplicationResponse | null | undefined): string => {
+  return workerProfile?.category || 'General Labor';
+};
+
+export const extractWorkerLocation = (workerProfile: WorkerProfileApplicationResponse | null | undefined): string => {
+  if (!workerProfile?.location_city || !workerProfile?.location_state) {
+    return 'Location not specified';
+  }
+  return `${workerProfile.location_city}, ${workerProfile.location_state}`;
+};
+
+export const extractWorkerDescription = (workerProfile: WorkerProfileApplicationResponse | null | undefined): string => {
+  return workerProfile?.description || 'No description provided. Contact worker for more details about their experience and qualifications.';
+};
+
+export const extractWorkerHourlyRate = (workerProfile: WorkerProfileApplicationResponse | null | undefined): number => {
+  return workerProfile?.hourly_rate || 0;
+};
+
+export const extractWorkerDailyRate = (workerProfile: WorkerProfileApplicationResponse | null | undefined): number => {
+  return workerProfile?.daily_rate || 0;
+};
+
+export const extractWorkerSkills = (workerProfile: WorkerProfileApplicationResponse | null | undefined): string[] => {
+  return workerProfile?.skills || [];
+};
 
 export interface Contract {
   id: string;

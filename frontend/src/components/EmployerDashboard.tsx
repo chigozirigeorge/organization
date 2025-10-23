@@ -24,26 +24,49 @@ export const EmployerDashboard = () => {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      const response = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+ const fetchDashboardData = async () => {
+  try {
+    const response = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.stats || data);
-        setRecentJobs(data.recentJobs || []);
-        setActiveContracts(data.activeContracts || []);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('📊 Employer Dashboard API Response:', data);
+      
+      // Handle different response structures
+      if (data.data) {
+        const dashboardData = data.data;
+        setStats({
+          totalJobs: dashboardData.posted_jobs?.length || 0,
+          activeContracts: dashboardData.active_contracts?.length || 0,
+          completedJobs: dashboardData.completed_jobs || 0,
+          totalSpent: dashboardData.total_spent || 0,
+        });
+        setRecentJobs(dashboardData.posted_jobs || []);
+        setActiveContracts(dashboardData.active_contracts || []);
+      } else {
+        // Fallback structure
+        setStats({
+          totalJobs: data.posted_jobs?.length || 0,
+          activeContracts: data.active_contracts?.length || 0,
+          completedJobs: data.completed_jobs || 0,
+          totalSpent: data.total_spent || 0,
+        });
+        setRecentJobs(data.posted_jobs || []);
+        setActiveContracts(data.active_contracts || []);
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-    } finally {
-      setLoading(false);
+    } else {
+      console.error('Failed to fetch employer dashboard:', response.status);
     }
-  };
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -68,7 +91,7 @@ export const EmployerDashboard = () => {
           <p className="text-muted-foreground">Manage your jobs and workers</p>
         </div>
         <Button asChild>
-          <Link to="/jobs/create">Post New Job</Link>
+          <Link to="/dashboard/jobs/create">Post New Job</Link>
         </Button>
       </div>
 
@@ -162,7 +185,7 @@ export const EmployerDashboard = () => {
                       </div>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/jobs/${job.id}`}>View</Link>
+                      <Link to={`/dashboard/jobs/${job.id}`}>View</Link>
                     </Button>
                   </div>
                 ))

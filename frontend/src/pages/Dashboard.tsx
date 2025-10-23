@@ -1,7 +1,7 @@
 // components/Dashboard.tsx - Fixed TypeScript errors
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
@@ -23,15 +23,20 @@ import {
   AlertCircle, Briefcase, UserPlus, Wallet, Home, Settings, FileText, 
   TrendingUp, Users, Star, Shield, CreditCard, SettingsIcon, Menu, X,
   UserCheck, ShieldCheck, BarChart3, Building, ClipboardList, MessageSquare,
-  DollarSign, Clock, Calendar, Award, Target, LucideIcon
+  DollarSign, Clock, Calendar, Award, Target, LucideIcon,
+  Image as ImageIcon // Rename to avoid conflict
 } from 'lucide-react';
 import { RoleSelection } from '@/components/RoleSelection';
-import { VerificationPrompt } from '@/components/VerificationPrompt';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Settings as Setting } from '@/components/Settings';
 import { VerifierDashboard } from '@/components/VerifierDashboard'; 
 import { AdminDashboard } from '@/components/AdminDashboard'; 
+import { WorkerPortfolio } from '@/components/WorkerPortfolio';
+import { WorkersList } from '@/components/WorkersList';
+import { JobDetails } from '@/components/JobDetails';
+import { JobApplication } from '@/components/JobApplication';
+import { CreateJobApplication } from '@/components/CreateJobApplication';
 
 // Define interfaces for better TypeScript support
 interface DashboardStat {
@@ -48,12 +53,13 @@ interface NavigationItem {
   label: string;
   icon: LucideIcon;
   description: string;
+  path: string;
 }
 
 const Dashboard = () => {
-  const { user, token, logout, isAuthenticated, refreshUser } = useAuth();
+  const { user, token, isAuthenticated, refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState('home');
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashboardStats, setDashboardStats] = useState({
@@ -79,6 +85,39 @@ const Dashboard = () => {
   if (user && !user.role) {
     return <RoleSelection />;
   }
+
+ const getCurrentSection = () => {
+  const path = location.pathname;
+   console.log('🔍 Dashboard Route Detection - Current path:', path);
+
+  // Job-related routes
+  if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
+  if (path.includes('/dashboard/jobs/create')) return 'create-job';
+  if (path.includes('/dashboard/jobs/') && path.includes('/apply')) return 'job-apply'; // NEW
+  // if (path.match(/\/dashboard\/jobs\/[^/]+\/apply/)) return 'job-apply'; // More specific regex
+  if (path.match(/\/dashboard\/jobs\/[^/]+$/)) return 'job-details'; // Job details without apply
+  if (path.includes('/dashboard/jobs/') && !path.includes('/apply')) return 'job-details';
+  if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
+  
+  // Worker routes
+  if (path.includes('/dashboard/worker/portfolio')) return 'portfolio';
+  if (path.includes('/dashboard/worker/profile')) return 'worker-setup';
+  
+  // Other routes
+  if (path.includes('/dashboard/wallet')) return 'wallet';
+  if (path.includes('/dashboard/my-jobs')) return 'my-jobs';
+  if (path.includes('/dashboard/contracts')) return 'contracts';
+  if (path.includes('/dashboard/settings')) return 'settings';
+  if (path.includes('/dashboard/workers')) return 'workers';
+  
+  return 'home';
+};
+
+  const [activeSection, setActiveSection] = useState(getCurrentSection());
+
+  useEffect(() => {
+    setActiveSection(getCurrentSection());
+  }, [location.pathname]);
 
   // Add a function to manually refresh KYC status
   const checkKYCStatus = async () => {
@@ -291,96 +330,33 @@ const Dashboard = () => {
     return baseStats;
   };
 
-  // Render different sections based on active section
-  // const renderActiveSection = () => {
-  //   switch (activeSection) {
-  //     case 'home':
-  //       if (user.role === 'verifier') {
-  //         return <VerifierDashboard />;
-  //       } else if (user.role === 'admin') {
-  //         return <AdminDashboard />;
-  //       }
-  //       return <JobsList />;
-  //     case 'worker-setup':
-  //       return <WorkerProfileSetup />;
-  //     case 'create-job':
-  //       return <CreateJob />;
-  //     case 'wallet':
-  //       return <WalletManagement />;
-  //     case 'my-jobs':
-  //       return <MyJobs />;
-  //     case 'contracts':
-  //       return <MyContracts />;
-  //     case 'worker-dashboard':
-  //       return <WorkerDashboard />;
-  //     case 'employer-dashboard':
-  //       return <EmployerDashboard />;
-  //     case 'verifier-dashboard':
-  //       return <VerifierDashboard />;
-  //     case 'admin-dashboard':
-  //       return <AdminDashboard />;
-  //     case 'job-progress':
-  //       return <JobProgress />;
-  //     case 'reviews':
-  //       return <JobReviews />;
-  //     case 'disputes':
-  //       return <DisputeManagement />;
-  //     case 'escrow':
-  //       return <EscrowManagement />;
-  //     case 'settings':
-  //       return <Setting />;
-  //     default:
-  //       if (user.role === 'verifier') {
-  //         return <VerifierDashboard />;
-  //       } else if (user.role === 'admin') {
-  //         return <AdminDashboard />;
-  //       }
-  //       return <JobsList />;
-  //   }
-  // };
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    setSidebarOpen(false);
+  };
 
   const renderActiveSection = () => {
-  // Always show role-specific dashboard for 'home' section
-  if (activeSection === 'home') {
-    switch (user.role) {
-      case 'worker':
-        return <WorkerDashboard />;
-      case 'employer':
-        return <EmployerDashboard />;
-      case 'verifier':
-        return <VerifierDashboard />;
-      case 'admin':
-        return <AdminDashboard />;
-      default:
-        // For users without role or basic users, show jobs list
-        return <JobsList />;
-    }
+
+    const pathSegments = location.pathname.split('/');
+    const jobId = pathSegments[3];
+
+    // Handle job browsing for all roles
+  if (activeSection === 'jobs') {
+    return <JobsList />;
   }
 
-  // Other sections remain the same
-  switch (activeSection) {
-    case 'worker-setup':
-      return <WorkerProfileSetup />;
-    case 'create-job':
-      return <CreateJob />;
-    case 'wallet':
-      return <WalletManagement />;
-    case 'my-jobs':
-      return <MyJobs />;
-    case 'contracts':
-      return <MyContracts />;
-    case 'job-progress':
-      return <JobProgress />;
-    case 'reviews':
-      return <JobReviews />;
-    case 'disputes':
-      return <DisputeManagement />;
-    case 'escrow':
-      return <EscrowManagement />;
-    case 'settings':
-      return <Setting />;
-    default:
-      // Fallback to role-specific dashboard
+  // Handle job details view
+  if (activeSection === 'job-details') {
+    return <JobDetails key={jobId}/>;
+  }
+
+  // Handle job application view - NEW
+  if (activeSection === 'job-apply') {
+    return <CreateJobApplication key={jobId} />;
+  }
+
+    // Always show role-specific dashboard for 'home' section
+    if (activeSection === 'home') {
       switch (user.role) {
         case 'worker':
           return <WorkerDashboard />;
@@ -391,10 +367,56 @@ const Dashboard = () => {
         case 'admin':
           return <AdminDashboard />;
         default:
+          // For users without role or basic users, show jobs list
           return <JobsList />;
       }
-  }
-};
+    }
+
+    // Other sections remain the same
+    switch (activeSection) {
+      case 'worker-setup':
+        return <WorkerProfileSetup />;
+      case 'create-job':
+        return <CreateJob />;
+      case 'wallet':
+        return <WalletManagement />;
+      case 'my-jobs':
+        return <MyJobs />;
+      case 'contracts':
+        return <MyContracts />;
+      case 'job-progress':
+        return <JobProgress />;
+      case 'reviews':
+        return <JobReviews />;
+      case 'disputes':
+        return <DisputeManagement />;
+      case 'escrow':
+        return <EscrowManagement />;
+      case 'settings':
+        return <Setting />;
+      case 'portfolio':
+      return <WorkerPortfolio />;
+    case 'workers': // Add this for employer worker browsing
+      return <WorkersList />;
+      default:
+        if (location.pathname.includes('/dashboard/jobs/') && !location.pathname.includes('/apply')) {
+        return <JobDetails />;
+        }
+        // Fallback to role-specific dashboard
+        switch (user.role) {
+          case 'worker':
+            return <WorkerDashboard />;
+          case 'employer':
+            return <EmployerDashboard />;
+          case 'verifier':
+            return <VerifierDashboard />;
+          case 'admin':
+            return <AdminDashboard />;
+          default:
+            return <JobsList />;
+        }
+    }
+  };
 
   // Enhanced navigation items based on role - FIXED TypeScript
   const getNavigationItems = (): NavigationItem[] => {
@@ -403,13 +425,15 @@ const Dashboard = () => {
         id: 'home',
         label: 'Home',
         icon: Home,
-        description: 'Main dashboard'
+        description: 'Main dashboard',
+        path: '/dashboard'
       },
       {
         id: 'wallet',
         label: 'Wallet',
         icon: Wallet,
-        description: 'Manage funds'
+        description: 'Manage funds',
+        path: '/dashboard/wallet'
       }
     ];
 
@@ -417,35 +441,40 @@ const Dashboard = () => {
       return [
         ...baseItems,
         {
-          id: 'my-jobs',
-          label: 'My Jobs',
+          id: 'jobs',
+          label: 'Browse Jobs',
           icon: Briefcase,
-          description: 'Job applications'
+          description: 'Find work opportunities',
+          path: '/dashboard/jobs'
+        },
+        {
+          id: 'my-jobs',
+          label: 'My Applications',
+          icon: FileText,
+          description: 'Job applications',
+          path: '/dashboard/my-jobs'
+        },
+        {
+          id: 'portfolio',
+          label: 'My Portfolio',
+          icon: ImageIcon, // Use the renamed import
+          description: 'Showcase your work',
+          path: '/dashboard/worker/portfolio'
         },
         {
           id: 'contracts',
           label: 'Contracts',
           icon: FileText,
-          description: 'Active contracts'
+          description: 'Active contracts',
+          path: '/dashboard/contracts'
         },
-        {
-          id: 'worker-dashboard',
-          label: 'Dashboard',
-          icon: BarChart3,
-          description: 'Performance overview'
-        },
-        {
-          id: 'job-progress',
-          label: 'Job Progress',
-          icon: TrendingUp,
-          description: 'Track work status'
-        },
-        {
-          id: 'reviews',
-          label: 'My Reviews',
-          icon: Star,
-          description: 'Client feedback'
-        }
+        // {
+        //   id: 'settings',
+        //   label: 'Settings',
+        //   icon: SettingsIcon,
+        //   description: 'Account settings',
+        //   path: '/dashboard/settings'
+        // }
       ];
     } else if (user.role === 'employer') {
       return [
@@ -454,69 +483,72 @@ const Dashboard = () => {
           id: 'create-job',
           label: 'Post Job',
           icon: UserPlus,
-          description: 'Hire workers'
+          description: 'Hire workers',
+          path: '/dashboard/jobs/create'
+        },
+        {
+          id: 'jobs',
+          label: 'Browse Workers',
+          icon: Users,
+          description: 'Find talent',
+          path: '/dashboard/workers'
         },
         {
           id: 'my-jobs',
           label: 'My Jobs',
           icon: Briefcase,
-          description: 'Job postings'
+          description: 'Job postings',
+          path: '/dashboard/my-jobs'
         },
         {
           id: 'contracts',
           label: 'Contracts',
           icon: FileText,
-          description: 'Worker agreements'
+          description: 'Worker agreements',
+          path: '/dashboard/contracts'
         },
-        {
-          id: 'employer-dashboard',
-          label: 'Dashboard',
-          icon: BarChart3,
-          description: 'Business overview'
-        },
-        {
-          id: 'escrow',
-          label: 'Escrow',
-          icon: CreditCard,
-          description: 'Payment management'
-        }
+        // {
+        //   id: 'settings',
+        //   label: 'Settings',
+        //   icon: SettingsIcon,
+        //   description: 'Account settings',
+        //   path: '/dashboard/settings'
+        // }
       ];
     } else if (user.role === 'verifier') {
       return [
         ...baseItems,
         {
-          id: 'verifier-dashboard',
+          id: 'verifications',
           label: 'Verifications',
           icon: UserCheck,
-          description: 'Review documents'
+          description: 'Review documents',
+          path: '/dashboard'
         },
         {
-          id: 'quick-review',
-          label: 'Quick Review',
-          icon: ClipboardList,
-          description: 'Efficient review'
+          id: 'settings',
+          label: 'Settings',
+          icon: SettingsIcon,
+          description: 'Account settings',
+          path: '/dashboard/settings'
         }
       ];
     } else if (user.role === 'admin') {
       return [
         ...baseItems,
         {
-          id: 'admin-dashboard',
+          id: 'admin',
           label: 'Admin Panel',
           icon: Shield,
-          description: 'Platform management'
+          description: 'Platform management',
+          path: '/dashboard'
         },
         {
-          id: 'user-management',
-          label: 'Users',
-          icon: Users,
-          description: 'User management'
-        },
-        {
-          id: 'analytics',
-          label: 'Analytics',
-          icon: BarChart3,
-          description: 'Platform insights'
+          id: 'settings',
+          label: 'Settings',
+          icon: SettingsIcon,
+          description: 'Account settings',
+          path: '/dashboard/settings'
         }
       ];
     }
@@ -601,10 +633,7 @@ const Dashboard = () => {
                   key={item.id}
                   variant={activeSection === item.id ? 'default' : 'ghost'}
                   className="w-full justify-start h-12 px-4 rounded-xl transition-all duration-200 hover:shadow-md"
-                  onClick={() => {
-                    setActiveSection(item.id);
-                    setSidebarOpen(false);
-                  }}
+                  onClick={() => handleNavigation(item.path)}
                 >
                   <item.icon className={`h-4 w-4 mr-3 ${
                     activeSection === item.id ? 'text-white' : 'text-slate-600'
@@ -626,7 +655,7 @@ const Dashboard = () => {
               <Button
                 variant="ghost"
                 className="w-full justify-start text-slate-600 hover:text-slate-800"
-                onClick={() => setActiveSection('settings')}
+                onClick={() => handleNavigation('/dashboard/settings')}
               >
                 <SettingsIcon className="h-4 w-4 mr-3" />
                 Settings
@@ -692,11 +721,11 @@ const Dashboard = () => {
                   <ShieldCheck className="h-5 w-5 text-slate-600" />
                   Identity Verification Status
                 </div>
+                </CardTitle>
                 <Button variant="outline" size="sm" onClick={checkKYCStatus}>
                   Refresh Status
                 </Button>
-              </CardTitle>
-            </CardHeader>
+              </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>
@@ -813,7 +842,7 @@ const Dashboard = () => {
               <CardContent>
                 <div className="flex gap-4">
                   <Button 
-                    onClick={() => setActiveSection('worker-setup')}
+                    onClick={() => handleNavigation('/dashboard/worker/profile')}
                     className="bg-gradient-to-r from-primary to-primary/90 shadow-lg"
                   >
                     <Briefcase className="h-4 w-4 mr-2" />
@@ -821,7 +850,7 @@ const Dashboard = () => {
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => setActiveSection('create-job')}
+                    onClick={() => handleNavigation('/dashboard/jobs/create')}
                     className="border-primary text-primary hover:bg-primary/10"
                   >
                     <UserPlus className="h-4 w-4 mr-2" />

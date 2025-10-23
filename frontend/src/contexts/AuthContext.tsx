@@ -463,7 +463,7 @@ const getNextRequiredStep = (user: User): string => {
   
   if (user.role === 'worker' && !user.profile_completed) {
     console.log('👷 Worker profile not completed');
-    return 'worker-profile';
+    return 'worker-profile-setup';
   }
   
   console.log('✅ All steps completed, going to dashboard');
@@ -561,14 +561,14 @@ const navigateToNextStep = (nextStep: string) => {
       navigate('/select-role', { replace: true });
       break;
     
-    case 'worker-profile':
+    case 'worker-profile-setup':
       toast.success('Login successful! Complete your worker profile.');
-      navigate('/worker/profile-setup', { replace: true });
+      navigate('/dashboard/worker/profile-setup', { replace: true });
       break;
     
     case 'employer-dashboard':
       toast.success('Login successful! Welcome back.');
-      navigate('/employer/dashboard', { replace: true });
+      navigate('/dashboard/employer/dashboard', { replace: true });
       break;
     
     default:
