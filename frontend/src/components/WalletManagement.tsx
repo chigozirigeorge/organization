@@ -1,6 +1,7 @@
-// components/WalletManagement.tsx (Fixed wallet detection)
+// components/WalletManagement.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -8,10 +9,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Wallet, Plus, ArrowUp, ArrowDown, Send, History, CreditCard, Building, User, Calendar, RefreshCw, Shield, Star, TrendingUp, Award } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { 
+  ArrowDown, 
+  ArrowUp, 
+  Award,
+  Building,
+  Calendar,
+  CreditCard,
+  History,
+  Plus,
+  RefreshCw, 
+  Send, 
+  Shield,
+  Star,
+  TrendingUp,
+  User,
+  Wallet
+} from 'lucide-react';
 
 interface WalletData {
   id: string;
@@ -52,6 +69,11 @@ export const WalletManagement = () => {
   const [fetching, setFetching] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [depositError, setDepositError] = useState('');
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [currentTransaction, setCurrentTransaction] = useState<{
+    type: 'transfer' | 'withdrawal';
+    data: any;
+  } | null>(null);
 
   // Form states
   const [depositData, setDepositData] = useState({
@@ -631,6 +653,68 @@ export const WalletManagement = () => {
     }
   };
 
+  const handleWithdrawRequest = async (requestBody: any) => {
+    try {
+      const response = await fetch('https://verinest.up.railway.app/api/wallet/withdraw', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        } as HeadersInit,
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+      console.log('📨 Withdraw response status:', response.status);
+      console.log('📨 Withdraw response body:', responseText);
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { message: responseText };
+      }
+
+      // Handle PIN requirement first
+      if (responseData?.status === "error" && responseData.message.includes("transaction_pin")) {
+        setShowPinDialog(true);
+        setCurrentTransaction({ 
+          type: 'withdrawal', 
+          data: requestBody 
+        });
+        return false;
+      }
+
+      if (!response.ok) {
+        // Check for specific error cases
+        if (response.status === 404 && responseText.includes('bank account not found')) {
+          throw new Error('Bank account not found. Please check the account details.');
+        } else if (response.status === 401) {
+          throw new Error('Invalid PIN or OTP. Please try again.');
+        } else if (response.status === 400) {
+          throw new Error(responseData.message || 'Invalid withdrawal request. Please check your details.');
+        } else if (response.status === 403) {
+          throw new Error('Insufficient permissions. Please verify your account.');
+        } else if (response.status === 422 && responseData.errors) {
+          const validationErrors = Object.values(responseData.errors).flat();
+          throw new Error(validationErrors.join(', '));
+        }
+        
+        throw new Error(responseData.message || 'Withdrawal failed. Please try again.');
+      }
+
+      toast.success('Withdrawal request submitted successfully!');
+      setWithdrawData({ amount: '', bank_account_id: '' });
+      await checkWalletStatus();
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error; // Re-throw validation and specific errors
+      }
+      throw new Error('An unexpected error occurred during withdrawal');
+    }
+  };
+
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -667,39 +751,8 @@ export const WalletManagement = () => {
         }
       };
 
-      console.log('Withdraw request:', requestBody);
-
-      const response = await fetch('https://verinest.up.railway.app/api/wallet/withdraw', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } as HeadersInit,
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseText = await response.text();
-      console.log('Withdraw response:', responseText);
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { message: responseText };
-      }
-
-      if (response.ok) {
-        toast.success('Withdrawal request submitted successfully!');
-        setWithdrawData({ amount: '', bank_account_id: '' });
-        await checkWalletStatus();
-      } else {
-        if (response.status === 422 && responseData.errors) {
-          const validationErrors = Object.values(responseData.errors).flat();
-          throw new Error(validationErrors.join(', '));
-        } else {
-          throw new Error(responseData.message || `Withdrawal failed (${response.status})`);
-        }
-      }
+      await handleWithdrawRequest(requestBody);
+      
     } catch (error: any) {
       console.error('Withdrawal failed:', error);
       toast.error(error.message || 'Withdrawal failed');
@@ -708,7 +761,140 @@ export const WalletManagement = () => {
     }
   };
 
-// In WalletManagement.tsx - Fix the transfer function
+// In WalletManagement.tsx
+const TransactionPinDialog = () => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [sendingOtp, setSendingOtp] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!currentTransaction) return;
+
+    try {
+      const data = {
+        ...currentTransaction.data,
+        transaction_pin: pin
+      };
+
+      if (currentTransaction.type === 'transfer') {
+        await handleTransferRequest(data);
+      } else {
+        await handleWithdrawRequest(data);
+      }
+      setShowPinDialog(false);
+    } catch (error) {
+      setError('Invalid PIN. Please try again.');
+    }
+  };
+
+  const handleRequestOtp = async () => {
+    setSendingOtp(true);
+    try {
+      if (currentTransaction) {
+        // Try the transaction without PIN to trigger OTP send
+        if (currentTransaction.type === 'transfer') {
+          await handleTransferRequest(currentTransaction.data);
+        } else {
+          await handleWithdrawRequest(currentTransaction.data);
+        }
+      }
+    } finally {
+      setSendingOtp(false);
+      setShowPinDialog(false);
+    }
+  };
+
+  return (
+    <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Enter Transaction PIN</DialogTitle>
+          <DialogDescription>
+            Please enter your 4-digit transaction PIN to continue
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="pin">Transaction PIN</Label>
+            <Input
+              id="pin"
+              type="password"
+              maxLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="Enter 4-digit PIN"
+            />
+            {error && <p className="text-sm text-red-500">{error}</p>}
+          </div>
+        </div>
+        <DialogFooter className="flex-col space-y-2">
+          <Button onClick={handleSubmit} disabled={pin.length !== 4}>
+            Confirm Transaction
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleRequestOtp}
+            disabled={sendingOtp}
+          >
+            {sendingOtp ? 'Sending OTP...' : 'Use Email OTP Instead'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const handleTransferRequest = async (requestBody: any) => {
+  const response = await fetch('https://verinest.up.railway.app/api/wallet/transfer', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  const responseText = await response.text();
+  console.log('📨 Transfer response status:', response.status);
+  console.log('📨 Transfer response body:', responseText);
+
+  let responseData;
+  try {
+    responseData = JSON.parse(responseText);
+  } catch {
+    responseData = { message: responseText };
+  }
+
+  if (response.ok) {
+    toast.success('Transfer completed successfully!');
+    setTransferData({ amount: '', recipient_identifier: '', description: '' });
+    await checkWalletStatus(); // Refresh wallet data
+    return true;
+  } else {
+    // Handle specific error cases
+    if (responseData.status === "error" && responseData.message.includes("transaction_pin")) {
+      setShowPinDialog(true);
+      setCurrentTransaction({ 
+        type: 'transfer', 
+        data: requestBody 
+      });
+      return false;
+    }
+    
+    if (response.status === 404 && responseData.message === "Recipient not found") {
+      throw new Error('Recipient not found. Please check the email address.');
+    } else if (response.status === 404) {
+      throw new Error('Transfer service is currently unavailable. Please try again later.');
+    } else if (response.status === 400) {
+      throw new Error(responseData.message || 'Invalid transfer request');
+    } else if (response.status === 422) {
+      throw new Error('Validation failed. Please check the recipient details.');
+    } else {
+      throw new Error(responseData.message || `Transfer failed: ${response.status}`);
+    }
+  }
+};
+
 const handleTransfer = async (e: React.FormEvent) => {
   e.preventDefault();
   setLoading(true);
@@ -737,43 +923,8 @@ const handleTransfer = async (e: React.FormEvent) => {
     };
 
     console.log('🔄 Sending transfer request:', requestBody);
+    await handleTransferRequest(requestBody);
 
-    const response = await fetch('https://verinest.up.railway.app/api/wallet/transfer', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    const responseText = await response.text();
-    console.log('📨 Transfer response status:', response.status);
-    console.log('📨 Transfer response body:', responseText);
-
-    let responseData;
-    try {
-      responseData = JSON.parse(responseText);
-    } catch {
-      responseData = { message: responseText };
-    }
-
-    if (response.ok) {
-      toast.success('Transfer completed successfully!');
-      setTransferData({ amount: '', recipient_identifier: '', description: '' });
-      await checkWalletStatus(); // Refresh wallet data
-    } else {
-      // Provide more specific error messages
-      if (response.status === 404) {
-        throw new Error('Transfer service is currently unavailable. Please try again later.');
-      } else if (response.status === 400) {
-        throw new Error(responseData.message || 'Invalid transfer request');
-      } else if (response.status === 422) {
-        throw new Error('Validation failed. Please check the recipient details.');
-      } else {
-        throw new Error(responseData.message || `Transfer failed: ${response.status}`);
-      }
-    }
   } catch (error: any) {
     console.error('❌ Transfer failed:', error);
     toast.error(error.message || 'Transfer failed. Please try again.');
@@ -1683,6 +1834,9 @@ const handleTransfer = async (e: React.FormEvent) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Transaction PIN Dialog */}
+      <TransactionPinDialog />
     </div>
   );
 };

@@ -37,6 +37,9 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { VerifierDashboard } from './components/VerifierDashboard';
 import { WorkerPortfolio } from './components/WorkerPortfolio';
 import { Analytics } from "@vercel/analytics/react"
+import OAuthCallback from './pages/OAuthCallback';
+import OAuthRedirect from './pages/OAuthRedirect';
+import { TokenHandler } from './components/TokenHandler';
 
 // Main App Routes - All protected routes now go through Dashboard
 const AppRoutes = () => {
@@ -55,6 +58,9 @@ const AppRoutes = () => {
       {/* Public Routes - No authentication required */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/oauth-callback" element={<OAuthCallback />} />
+      <Route path="/oauth-redirect" element={<OAuthRedirect />} />
+      <Route path="/auth/callback" element={<TokenHandler />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-email" element={<EmailVerification />} />
       <Route path="/payment/verify" element={<PaymentVerification />} />

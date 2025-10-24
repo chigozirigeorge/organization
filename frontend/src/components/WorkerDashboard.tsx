@@ -212,9 +212,9 @@ const fetchDashboardData = async () => {
                     <Link to="/dashboard/jobs">Browse Jobs</Link>
                   </Button>
                 </div>
-              ) : (
+              ) : (   ///changed id to job id
                 recentApplications.slice(0, 5).map((application) => (
-                  <div key={application.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                  <div key={application.job_id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors">
                     <div className="space-y-1 flex-1">
                       <p className="font-medium text-sm">{application.job?.title || 'Job Application'}</p>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">

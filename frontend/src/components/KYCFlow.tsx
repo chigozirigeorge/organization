@@ -68,7 +68,7 @@ export const KYCFlow = () => {
   // Add scroll handlers for terms and privacy
   const handleTermsScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 50; // 50px buffer
+    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 60; // 50px buffer
     
     if (scrolledToBottom && !termsScrolled) {
       setTermsScrolled(true);
@@ -77,7 +77,7 @@ export const KYCFlow = () => {
 
   const handlePrivacyScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 50; // 50px buffer
+    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 60; // 50px buffer
     
     if (scrolledToBottom && !privacyScrolled) {
       setPrivacyScrolled(true);
@@ -194,7 +194,7 @@ const submitVerification = async () => {
       setCurrentStep('complete');
       
       setTimeout(() => {
-        navigate('/select-role');
+        navigate('/dashboard');
       }, 2000);
     } else {
       let errorData;
@@ -347,8 +347,8 @@ const submitVerification = async () => {
                   Verification typically takes 24-48 hours. You can still browse the platform while waiting.
                 </AlertDescription>
               </Alert>
-              <Button onClick={() => navigate('/select-role')}>
-                Continue to Role Selection
+              <Button onClick={() => navigate('/dashboard')}>
+                Continue to Dashboard
               </Button>
             </CardContent>
           </Card>
