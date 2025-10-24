@@ -38,7 +38,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (emailOrToken: string, type: 'password' | 'oauth', password?: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
@@ -59,6 +59,7 @@ interface AuthContextType {
   checkVerificationStatus: () => Promise<boolean>;
   getNextRequiredStep: (user: User) => string;
   authInitialized: boolean; 
+  loginWithOAuth: (provider: 'google') => void;
 }
 
 interface RegisterData {
@@ -127,6 +128,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Set token in API client
         apiClient.setToken(storedToken);
         setToken(storedToken);
+
+        console.log('🔄 Auth Initialization - Stored token:', storedToken ? 'Yes' : 'No');
+    console.log('🔄 Auth Initialization - Stored user:', storedUser ? 'Yes' : 'No');
         
         // Validate token and get fresh user data
         try {
@@ -319,6 +323,16 @@ const normalizeUserData = (userData: any): User => {
     }
   };
 
+ // In AuthContext.tsx - Replace the loginWithOAuth method
+const loginWithOAuth = (provider: 'google') => {
+  console.log('🔄 Starting OAuth login flow...');
+  const oauthUrl = `${import.meta.env.VITE_API_URL || 'https://verinest.up.railway.app'}/api/oauth/${provider}`;
+  
+  // Redirect directly to OAuth URL
+  window.location.href = oauthUrl;
+  console.log('🌐 Redirecting to OAuth provider:', oauthUrl);
+};
+
   const startVerificationFlow = () => {
     const progress: VerificationProgress = {
       currentStep: VERIFICATION_STEPS.TERMS,
@@ -451,19 +465,22 @@ const getNextRequiredStep = (user: User): string => {
     return 'kyc';
   }
   
-  if (user.kyc_verified === 'pending') {
-    console.log('⏳ KYC pending review');
-    return 'dashboard'; // Go to dashboard if KYC is pending
+  if (user.kyc_verified === 'pending' || user.kyc_verified === 'submitted') {
+    console.log('⏳ KYC pending review - directing to dashboard');
+    return 'dashboard'; // Go to dashboard if KYC is pending or submitted
   }
   
-  if (!user.role || user.role === 'user') {
-    console.log('🎭 No role selected');
-    return 'select-role';
-  }
-  
-  if (user.role === 'worker' && !user.profile_completed) {
-    console.log('👷 Worker profile not completed');
-    return 'worker-profile-setup';
+  // Only check role selection if KYC is fully verified
+  if (user.kyc_verified === 'verified') {
+    if (!user.role || user.role === 'user') {
+      console.log('🎭 KYC verified - now can select role');
+      return 'select-role';
+    }
+    
+    if (user.role === 'worker' && !user.profile_completed) {
+      console.log('👷 Worker profile not completed');
+      return 'worker-profile-setup';
+    }
   }
   
   console.log('✅ All steps completed, going to dashboard');
@@ -476,66 +493,121 @@ const getNextRequiredStep = (user: User): string => {
   };
 
  //fixed
-// In AuthContext.tsx - FIXED login function
-const login = async (email: string, password: string) => {
+// In AuthContext.tsx - Update the login method
+const login = async (emailOrToken: string, type: 'password' | 'oauth' = 'password', password?: string) => {
   try {
-    const data = await apiClient.post('/auth/login', { email, password });
-    
-    console.log('📨 Login API response:', data);
+    let token: string;
 
-    const token = data?.token ?? data?.data?.token;
+    if (type === 'oauth') {
+      // For OAuth login, emailOrToken is the actual token from Google OAuth
+      console.log('🔐 Processing OAuth login with token');
+      token = emailOrToken;
+      
+      // Validate the token format
+      if (!token || token.split('.').length !== 3) {
+        throw new Error('Invalid OAuth token format received');
+      }
+      
+      console.log('✅ OAuth token validated, length:', token.length);
+    } else {
+      // For password login, make the API call
+      console.log('🔐 Processing password login');
+      const data = await apiClient.post('/auth/login', { 
+        email: emailOrToken, 
+        password: password 
+      });
+      
+      console.log('📨 Login API response:', data);
+      token = data?.token ?? data?.data?.token;
 
-    if (!token) {
-      throw new Error('Login succeeded but no token returned');
+      if (!token) {
+        throw new Error('Login succeeded but no token returned');
+      }
     }
 
-    // Set token in API client and localStorage FIRST
+    // Set token in API client FIRST to ensure /users/me call works
+    console.log('✅ Setting token in API client');
     apiClient.setToken(token);
-    localStorage.setItem('token', token);
+
+    // Then fetch user data before storing the token
+    console.log('👤 Fetching user data...');
+    const userResponse = await apiClient.get('/users/me');
     
-    // Set token in state IMMEDIATELY
+    // if (!userResponse.data?.user) {
+    //   throw new Error('No user data received after authentication');
+    // }
+
+    // // Only after successful user fetch, store everything
+    // console.log('✅ Setting token in storage');
+    // localStorage.setItem('token', token);
+    
+    // // Set token in state IMMEDIATELY
+    // setToken(token);
+
+    // console.log('✅ Token set, now fetching user data...');
+
+    // // Fetch user data after successful login
+    // try {
+    //   const userResponse = await apiClient.get('/users/me');
+    //   console.log('👤 User data response received');
+      
+    //   if (userResponse.data && userResponse.data.user) {
+    //     const normalizedUser = normalizeUserData(userResponse.data.user);
+        
+    //     // Set user in state and localStorage
+    //     setUser(normalizedUser);
+    //     localStorage.setItem('user', JSON.stringify(normalizedUser));
+
+    //     console.log('✅ Auth state updated with user:', normalizedUser.email);
+
+    //     // Navigate after user data is loaded
+    //     const nextStep = getNextRequiredStep(normalizedUser);
+    //     console.log('📍 Next step determined:', nextStep);
+        
+    //     // Use setTimeout to ensure navigation happens after state updates
+    //     setTimeout(() => {
+    //       navigateToNextStep(nextStep);
+    //     }, 100);
+
+    //   } else {
+    //     console.warn('⚠️ No user data received from /users/me');
+    //     setTimeout(() => {
+    //       toast.success('Login successful!');
+    //       navigate('/dashboard', { replace: true });
+    //     }, 100);
+    //   }
+    // } catch (userError: any) {
+    //   console.error('❌ Failed to fetch user data:', userError);
+    //   // Even if user fetch fails, proceed with login using token only
+    //   setTimeout(() => {
+    //     toast.success('Login successful!');
+    //     navigate('/dashboard', { replace: true });
+    //   }, 100);
+    // }
+
+    if (!userResponse.data?.user) {
+      throw new Error('No user data received after authentication');
+    }
+
+    // Store token and user data
+    console.log('✅ Storing auth data');
+    localStorage.setItem('token', token);
     setToken(token);
 
-    console.log('✅ Token set, now fetching user data...');
+    const normalizedUser = normalizeUserData(userResponse.data.user);
+    setUser(normalizedUser);
+    localStorage.setItem('user', JSON.stringify(normalizedUser));
 
-    // Fetch user data after successful login
-    try {
-      const userResponse = await apiClient.get('/users/me');
-      console.log('👤 User data response:', userResponse);
-      
-      if (userResponse.data && userResponse.data.user) {
-        const normalizedUser = normalizeUserData(userResponse.data.user);
-        
-        // Set user in state and localStorage
-        setUser(normalizedUser);
-        localStorage.setItem('user', JSON.stringify(normalizedUser));
+    console.log('✅ Auth state updated with user:', normalizedUser.email);
 
-        console.log('✅ Auth state updated with user:', normalizedUser);
+    // Determine next step and navigate
+    const nextStep = getNextRequiredStep(normalizedUser);
+    console.log('📍 Next step determined:', nextStep);
+    
+    setTimeout(() => {
+      navigateToNextStep(nextStep);
+    }, 100);
 
-        // Navigate after user data is loaded
-        const nextStep = getNextRequiredStep(normalizedUser);
-        console.log('📍 Next step determined:', nextStep);
-        
-        setTimeout(() => {
-          navigateToNextStep(nextStep);
-        }, 0);
-
-      } else {
-        // If no user data, still proceed but log warning
-        console.warn('⚠️ No user data received from /users/me');
-        setTimeout(() => {
-          toast.success('Login successful!');
-          navigate('/dashboard', { replace: true });
-        }, 0);
-      }
-    } catch (userError: any) {
-      console.error('❌ Failed to fetch user data:', userError);
-      // Even if user fetch fails, proceed with login using token only
-      setTimeout(() => {
-        toast.success('Login successful!');
-        navigate('/dashboard', { replace: true });
-      }, 0);
-    }
 
   } catch (error: any) {
     console.error('❌ Login failed:', error);
@@ -584,33 +656,44 @@ const navigateToNextStep = (nextStep: string) => {
         referral_code: data.referral_code?.trim() !== '' ? data.referral_code : undefined
       };
 
-      const responseData = await apiClient.post('/auth/register', requestData);
+      try {
+        const responseData = await apiClient.post('/auth/register', requestData);
 
-      // Auto-login if token is returned
-      if (responseData.token && responseData.user) {
-        apiClient.setToken(responseData.token);
-        setToken(responseData.token);
-        localStorage.setItem('token', responseData.token);
-        
-        const normalizedUser = normalizeUserData(responseData.user);
-        localStorage.setItem('user', JSON.stringify(normalizedUser));
-        setUser(normalizedUser);
-        
-        // Start verification flow for new users
-        if (getSafeBoolean(normalizedUser.email_verified)) {
-          toast.success('Registration successful! Starting verification...');
-          startVerificationFlow();
+        // Auto-login if token is returned
+        if (responseData.token && responseData.user) {
+          apiClient.setToken(responseData.token);
+          setToken(responseData.token);
+          localStorage.setItem('token', responseData.token);
+          
+          const normalizedUser = normalizeUserData(responseData.user);
+          localStorage.setItem('user', JSON.stringify(normalizedUser));
+          setUser(normalizedUser);
+          
+          // Start verification flow for new users
+          if (getSafeBoolean(normalizedUser.email_verified)) {
+            toast.success('Registration successful! Starting verification...');
+            startVerificationFlow();
+          } else {
+            toast.success('Registration successful! Please verify your email first.');
+            navigate('/verify-email');
+          }
         } else {
-          toast.success('Registration successful! Please verify your email first.');
-          navigate('/verify-email');
+          // Manual login required
+          toast.success('Registration successful! Please login.');
+          navigate('/login');
         }
-      } else {
-        // Manual login required
-        toast.success('Registration successful! Please login.');
-        navigate('/login');
+      } catch (apiError: any) {
+        // Check if this is a duplicate email error (400 status)
+        if (apiError?.response?.status === 400 && 
+            apiError.message?.toLowerCase().includes('email already registered')) {
+          // Re-throw with specific message to be handled by Register component
+          throw new Error('Email already registered');
+        }
+        // For other API errors
+        throw new Error(apiError.message || 'Registration failed');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Registration failed');
+      // Re-throw the error to be handled by the component
       throw error;
     }
   };
@@ -721,6 +804,7 @@ const navigateToNextStep = (nextStep: string) => {
     updateVerificationStatus,
     checkVerificationStatus,
     getNextRequiredStep,
+    loginWithOAuth,
     authInitialized
   };
 
