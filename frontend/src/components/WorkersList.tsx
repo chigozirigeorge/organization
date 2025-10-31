@@ -1,11 +1,13 @@
+// components/WorkersList.tsx - Updated
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { MapPin, Star, Briefcase, Calendar } from 'lucide-react';
+import { MapPin, Star, Briefcase, Calendar, MessageCircle } from 'lucide-react';
 import { nigeriaStates } from '../lib/states';
+import { toast } from 'sonner';
 
 // Available categories from API
 const CATEGORIES = [
@@ -70,11 +72,17 @@ interface Worker {
   };
   portfolio: any[];
   reviews: any[];
+  user?: {
+    id: string;
+    name: string;
+    username: string;
+    avatar_url?: string;
+  };
 }
 
 export const WorkersList = () => {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -87,9 +95,85 @@ export const WorkersList = () => {
     }
   }, [selectedCategory, selectedState, token]);
 
-  const handleViewProfile = (workerId: string) => {
-    navigate(`/workers/${workerId}`);
+  const handleViewProfile = (workerUserId: string) => {
+  console.log('👤 Viewing profile for worker user ID:', workerUserId);
+    navigate(`/dashboard/workers/${workerUserId}`);
   };
+
+  // In WorkersList.tsx - UPDATE the handleStartChat function
+  const handleStartChat = async (workerUserId: string) => {
+    if (!user || user.role !== 'employer') {
+      alert('Only employers can start chats with workers');
+      return;
+    }
+  
+    console.log('💬 [WorkersList] Starting chat with worker user ID:', workerUserId);
+  
+    try {
+      // First create the chat, then navigate
+      const response = await fetch('https://verinest.up.railway.app/api/chat/chats', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          other_user_id: workerUserId 
+        }),
+      });
+  
+      let chatId = null;
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [WorkersList] Chat created successfully:', data);
+        
+        // Navigate to chat with the created chat ID
+        chatId = data.data?.chat?.id || data.data?.id;
+      } else if (response.status === 422) {
+        // Chat already exists - fetch existing chats and find the right one
+        console.log('🔄 [WorkersList] Chat already exists, fetching existing chats...');
+        const chatsResponse = await fetch('https://verinest.up.railway.app/api/chat/chats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (chatsResponse.ok) {
+          const chatsData = await chatsResponse.json();
+          const existingChat = chatsData.data?.find((chat: any) => 
+            chat.other_user?.id === workerUserId
+          );
+          
+          if (existingChat) {
+            chatId = existingChat.id;
+            console.log('✅ [WorkersList] Found existing chat:', existingChat);
+          }
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('❌ [WorkersList] Failed to create chat:', errorData);
+        toast.error(errorData.message || 'Failed to start chat');
+        return;
+      }
+
+      if (chatId) {
+        navigate('/dashboard/chat', { 
+          state: { 
+            autoSelectChatId: chatId
+          } 
+        });
+        toast.success('Chat started successfully!');
+      } else {
+        console.error('❌ [WorkersList] No chat ID found');
+        toast.error('Failed to create chat: No chat data');
+      }
+    } catch (error) {
+      console.error('❌ [WorkersList] Network error starting chat:', error);
+      toast.error('Failed to start chat. Please try again.');
+    }
+  };
+
 
   const fetchWorkers = async () => {
     try {
@@ -198,7 +282,7 @@ export const WorkersList = () => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {workers.map((worker) => (
-              <Card key={worker.profile.id}>
+              <Card key={worker.profile.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle className="capitalize">
                     {worker.profile.category}
@@ -226,12 +310,26 @@ export const WorkersList = () => {
                       {worker.reviews.length} reviews
                     </div>
                   )}
-                  <Button 
-                    className="w-full mt-4"
-                    onClick={() => handleViewProfile(worker.profile.user_id)}
-                  >
-                    View Profile & Hire
-                  </Button>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-4">
+                    <Button 
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => handleViewProfile(worker.profile.user_id)}
+                    >
+                      View Profile
+                    </Button>
+                    {user?.role === 'employer' && (
+                      <Button 
+                        className="flex-1 gap-2"
+                        onClick={() => handleStartChat(worker.profile.user_id)}
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Chat
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}

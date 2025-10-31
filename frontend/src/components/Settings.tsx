@@ -9,12 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Eye, EyeOff, Save, User, Shield, Key, Briefcase, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { Alert, AlertDescription } from './ui/alert';
+import { TransactionPinSetup } from './TransactionPinSetup';
+import { ChangeTransactionPin } from './ChangeTransactionPin';
 
 export const Settings = () => {
   const { user, token, refreshUser, updateUserRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [showPassword, setShowPassword] = useState(false);
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [showChangePin, setShowChangePin] = useState(false);
   
   // Profile state
   const [profileData, setProfileData] = useState({
@@ -55,6 +60,30 @@ export const Settings = () => {
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPin = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('https://verinest.up.railway.app/api/auth/reset-transaction-pin', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        toast.success('PIN reset instructions sent to your email!');
+      } else {
+        throw new Error('Failed to send PIN reset');
+      }
+    } catch (error: any) {
+      console.error('Error resetting PIN:', error);
+      toast.error(error.message || 'Failed to reset PIN');
     } finally {
       setLoading(false);
     }
@@ -120,7 +149,7 @@ export const Settings = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -128,6 +157,10 @@ export const Settings = () => {
             <TabsTrigger value="security" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="transaction-pin" className="flex items-center gap-2">
+              <Key className="h-4 w-4" />
+              Transaction PIN
             </TabsTrigger>
             <TabsTrigger value="role" className="flex items-center gap-2">
               <Briefcase className="h-4 w-4" />
@@ -433,7 +466,85 @@ export const Settings = () => {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* Transaction pin section */}
+          <TabsContent value="transaction-pin" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Transaction PIN Management</CardTitle>
+                <CardDescription>
+                  Manage your 6-digit PIN for authorizing financial transactions
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {user?.transaction_pin ? (
+                  <div className="space-y-4">
+                    <Alert>
+                      <Shield className="h-4 w-4" />
+                      <AlertDescription>
+                        Your transaction PIN is set up and active.
+                      </AlertDescription>
+                    </Alert>
+                    
+                    <div className="grid gap-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setShowChangePin(true)}
+                      >
+                        Change Transaction PIN
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleResetPin}
+                        disabled={loading}
+                      >
+                        {loading ? 'Resetting...' : 'Reset PIN via Email'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Alert>
+                      <Shield className="h-4 w-4" />
+                      <AlertDescription>
+                        You haven't set up a transaction PIN yet. Set one up to secure your financial transactions.
+                      </AlertDescription>
+                    </Alert>
+                    
+                    <Button 
+                      onClick={() => setShowPinSetup(true)}
+                      className="w-full"
+                    >
+                      <Key className="h-4 w-4 mr-2" />
+                      Set Up Transaction PIN
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+         {/* Add the TransactionPinSetup modal */}
+         <TransactionPinSetup
+          isOpen={showPinSetup}
+          onClose={() => setShowPinSetup(false)}
+          onSetupComplete={() => {
+            setShowPinSetup(false);
+            refreshUser(); // Refresh user data to get the new PIN status
+            toast.success('Transaction PIN set up successfully!');
+          }}
+        />
+
+        {/* Add Change PIN Modal (you'll need to create this component) */}
+        <ChangeTransactionPin
+          isOpen={showChangePin}
+          onClose={() => setShowChangePin(false)}
+          onSuccess={() => {
+            setShowChangePin(false);
+            refreshUser();
+            toast.success('Transaction PIN changed successfully!');
+          }}
+        />
       </div>
     </div>
   );

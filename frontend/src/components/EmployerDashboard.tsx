@@ -165,7 +165,7 @@ export const EmployerDashboard = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   <p>No jobs posted yet</p>
                   <Button asChild variant="outline" className="mt-4">
-                    <Link to="/jobs/create">Post Your First Job</Link>
+                    <Link to="/dashboard/jobs/create">Post Your First Job</Link>
                   </Button>
                 </div>
               ) : (
@@ -208,7 +208,7 @@ export const EmployerDashboard = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   <p>No active contracts</p>
                   <Button asChild variant="outline" className="mt-4">
-                    <Link to="/jobs/create">Post a Job</Link>
+                    <Link to="/dashboard/jobs/create">Post a Job</Link>
                   </Button>
                 </div>
               ) : (
@@ -251,19 +251,19 @@ export const EmployerDashboard = () => {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Button asChild className="h-20 flex flex-col">
-              <Link to="/jobs/create">
+              <Link to="/dashboard/jobs/create">
                 <Briefcase className="h-6 w-6 mb-2" />
                 <span>Post New Job</span>
               </Link>
             </Button>
             <Button asChild variant="outline" className="h-20 flex flex-col">
-              <Link to="/jobs/my-jobs">
+              <Link to="/dashboard/my-jobs">
                 <Users className="h-6 w-6 mb-2" />
                 <span>Manage Jobs</span>
               </Link>
             </Button>
             <Button asChild variant="outline" className="h-20 flex flex-col">
-              <Link to="/contracts">
+              <Link to="/dashboard/contracts">
                 <FileText className="h-6 w-6 mb-2" />
                 <span>View Contracts</span>
               </Link>

@@ -11,10 +11,11 @@ interface User {
   username: string;
   email_verified: boolean;
   kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified'| 'submitted' | 'approved';
-  role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'verifier' | undefined;
+  role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'customer_care' | 'verifier' | undefined;
   verification_status?: 'pending' | 'submitted' | 'approved' | 'rejected';
   verification_data?: any;
   wallet_created?: boolean;
+  transaction_pin: number;
   bank_account_linked?: boolean;
   profile_completed?: boolean;
   
@@ -33,6 +34,7 @@ interface User {
   nin_number?: string;
   verification_number?: string;
   nearest_landmark?: string;
+  google_id: string;
 }
 
 interface AuthContextType {
@@ -190,16 +192,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
 
+// In AuthContext.tsx - Update the normalizeUserData function
 const normalizeUserData = (userData: any): User => {
   console.log('🔄 Normalizing user data from backend:', userData);
   
-  // Use backend values directly - no mapping needed
-  // const kyc_verified = userData.verification_status || 'pending';
-  
-  // console.log('📊 KYC Status (using backend value):', kyc_verified);
-  
   // Determine KYC status based on backend fields
-  let kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified' = 'unverified';
+  let kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified' | 'submitted' = 'unverified';
   
   if (userData.verification_status === 'approved' || userData.document_verified === true) {
     kyc_verified = 'verified';
@@ -208,27 +206,27 @@ const normalizeUserData = (userData: any): User => {
   } else if (userData.verification_status === 'rejected') {
     kyc_verified = 'rejected';
   } else {
-    kyc_verified = 'unverified'; // Default for new users
+    kyc_verified = 'unverified';
   }
 
   console.log('📊 KYC Status Mapping:', {
-      backend_verification_status: userData.verification_status,
-      backend_document_verified: userData.document_verified,
-      mapped_kyc_verified: kyc_verified
-    });
+    backend_verification_status: userData.verification_status,
+    backend_document_verified: userData.document_verified,
+    mapped_kyc_verified: kyc_verified
+  });
 
-  return {
+  // Create the normalized user object with ALL fields
+  const normalizedUser: User = {
     id: userData.id,
     name: userData.name,
     email: userData.email,
     username: userData.username,
     
-    // Email verification - map backend 'verified' to 'email_verified'
+    // Email verification
     email_verified: getSafeBoolean(userData.verified, getSafeBoolean(userData.email_verified)),
     
     // KYC verification status
     kyc_verified: kyc_verified,
-    //as 'pending' | 'verified' | 'rejected' | 'submitted' | 'approved' | 'unverified',
     verification_status: userData.verification_status || 'pending',
     
     // Role
@@ -239,7 +237,10 @@ const normalizeUserData = (userData: any): User => {
     bank_account_linked: getSafeBoolean(userData.bank_account_linked),
     profile_completed: getSafeBoolean(userData.profile_completed),
     
-    // Backend fields
+    // Transaction PIN
+    transaction_pin: userData.transaction_pin || null,
+    
+    // Backend fields - include ALL fields from backend
     verified: userData.verified,
     document_verified: userData.document_verified,
     trust_score: userData.trust_score || 0,
@@ -255,9 +256,13 @@ const normalizeUserData = (userData: any): User => {
     verification_number: userData.verification_number,
     nearest_landmark: userData.nearest_landmark,
     
-    // Keep existing fields if provided
+    // Additional fields that might be missing
     verification_data: userData.verification_data,
+    google_id: userData.google_id,
   };
+
+  console.log('✅ Normalized user data:', normalizedUser);
+  return normalizedUser;
 };
 
   const updateUser = (userData: Partial<User>) => {

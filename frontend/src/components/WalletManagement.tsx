@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
+import { TransactionPinModal } from './TransactionPinModal';
+import { TransactionPinSetup } from './TransactionPinSetup';
 import { 
   ArrowDown, 
   ArrowUp, 
@@ -70,6 +72,15 @@ export const WalletManagement = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [depositError, setDepositError] = useState('');
   const [showPinDialog, setShowPinDialog] = useState(false);
+  //
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [pendingTransaction, setPendingTransaction] = useState<{
+  type: 'transfer' | 'withdrawal';
+  data: any;
+  callback: (pin: string) => Promise<void>;
+  } | null>(null);
+//
   const [currentTransaction, setCurrentTransaction] = useState<{
     type: 'transfer' | 'withdrawal';
     data: any;
@@ -135,10 +146,24 @@ export const WalletManagement = () => {
 
   const navigate = useNavigate();
 
+  // Add this function to check if user has transaction PIN
+  const checkTransactionPin = async (): Promise<boolean> => {
+      if (!user?.transaction_pin) {
+        // User doesn't have PIN set up
+        const setupPin = window.confirm(
+          'You need to set up a transaction PIN to perform financial transactions. Would you like to set it up now?'
+        );
+        if (setupPin) {
+          setShowPinSetup(true);
+        }
+        return false;
+      }
+      return true;
+  };
+
   const checkWalletStatus = async () => {
     setFetching(true);
     try {
-      console.log('🔄 Checking wallet status...');
       
       const walletResponse = await fetch('https://verinest.up.railway.app/api/wallet', {
         headers: {
@@ -146,15 +171,11 @@ export const WalletManagement = () => {
           'Content-Type': 'application/json',
         } as HeadersInit,
       });
-
-      console.log('Wallet response status:', walletResponse.status);
       
       if (walletResponse.ok) {
         const walletData = await walletResponse.json();
-        console.log('✅ Wallet data received:', walletData);
         
         if (walletData.data) {
-          console.log('💰 Wallet balance:', walletData.data.balance);
           const newWalletData = {
             ...walletData.data,
             wallet_created: true
@@ -164,7 +185,6 @@ export const WalletManagement = () => {
           await fetchBankAccounts();
           await fetchTransactions();
         } else {
-          console.log('❌ No wallet data in response');
           setWalletData({
             id: '',
             balance: 0,
@@ -173,7 +193,6 @@ export const WalletManagement = () => {
           });
         }
       } else if (walletResponse.status === 404) {
-        console.log('❌ Wallet not found (404)');
         setWalletData({
           id: '',
           balance: 0,
@@ -181,9 +200,7 @@ export const WalletManagement = () => {
           wallet_created: false
         });
       } else {
-        console.log('❌ Wallet endpoint error:', walletResponse.status);
         const errorText = await walletResponse.text();
-        console.log('Error response:', errorText);
         setWalletData({
           id: '',
           balance: 0,
@@ -192,7 +209,6 @@ export const WalletManagement = () => {
         });
       }
     } catch (error) {
-      console.error('❌ Failed to check wallet status:', error);
       setWalletData({
         id: '',
         balance: 0,
@@ -206,7 +222,6 @@ export const WalletManagement = () => {
 
   const fetchBankAccounts = async () => {
     try {
-      console.log('🔄 Fetching bank accounts...');
       
       const response = await fetch('https://verinest.up.railway.app/api/wallet/bank-accounts', {
         headers: {
@@ -214,13 +229,9 @@ export const WalletManagement = () => {
           'Content-Type': 'application/json',
         } as HeadersInit,
       });
-
-      console.log('Bank accounts response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Bank accounts data:', data);
-        
         let accountsData = [];
         
         if (data.data && Array.isArray(data.data)) {
@@ -233,23 +244,18 @@ export const WalletManagement = () => {
           accountsData = data.data.accounts;
         }
         
-        console.log('🏦 Processed bank accounts:', accountsData);
         setBankAccounts(accountsData);
       } else {
-        console.error('❌ Bank accounts API error:', response.status);
         const errorText = await response.text();
-        console.error('Error details:', errorText);
         setBankAccounts([]);
       }
     } catch (error) {
-      console.error('❌ Failed to fetch bank accounts:', error);
       setBankAccounts([]);
     }
   };
 
   const fetchTransactions = async () => {
     try {
-      console.log('🔄 Fetching transactions...');
       
       const response = await fetch('https://verinest.up.railway.app/api/wallet/transactions', {
         headers: {
@@ -257,12 +263,9 @@ export const WalletManagement = () => {
           'Content-Type': 'application/json',
         } as HeadersInit,
       });
-
-      console.log('Transactions response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Transactions data received:', data);
         
         let transactionsData = [];
         
@@ -304,16 +307,12 @@ export const WalletManagement = () => {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         
-        console.log('📊 Unique transformed transactions:', transformedTransactions);
         setTransactions(transformedTransactions);
         
       } else if (response.status === 500) {
-        console.error('❌ Server error (500) fetching transactions');
         const errorText = await response.text();
-        console.error('Error details:', errorText);
         
         if (errorText.includes('transaction_type')) {
-          console.log('🔧 Detected schema mismatch, using fallback data');
           await useFallbackTransactions();
         } else {
           setTransactions([]);
@@ -321,13 +320,10 @@ export const WalletManagement = () => {
         }
         
       } else {
-        console.error(`❌ Transactions API error: ${response.status}`);
         const errorText = await response.text();
-        console.error('Error details:', errorText);
         setTransactions([]);
       }
     } catch (error) {
-      console.error('❌ Network error fetching transactions:', error);
       setTransactions([]);
     }
   };
@@ -358,7 +354,6 @@ export const WalletManagement = () => {
 
   const useFallbackTransactions = async () => {
     try {
-      console.log('🔄 Trying fallback transactions approach...');
       
       const walletResponse = await fetch('https://verinest.up.railway.app/api/wallet', {
         headers: {
@@ -369,7 +364,6 @@ export const WalletManagement = () => {
 
       if (walletResponse.ok) {
         const walletData = await walletResponse.json();
-        console.log('✅ Using wallet data for fallback transactions');
         
         const fallbackTransactions: Transaction[] = [];
         
@@ -392,7 +386,6 @@ export const WalletManagement = () => {
         setTransactions([]);
       }
     } catch (error) {
-      console.error('❌ Fallback also failed:', error);
       setTransactions([]);
     }
   };
@@ -444,7 +437,6 @@ export const WalletManagement = () => {
   const createWallet = async () => {
     setLoading(true);
     try {
-      console.log('🔄 Creating wallet...');
       
       const response = await fetch('https://verinest.up.railway.app/api/wallet/create', {
         method: 'POST',
@@ -453,11 +445,8 @@ export const WalletManagement = () => {
           'Content-Type': 'application/json',
         } as HeadersInit,
       });
-
-      console.log('Create wallet response status:', response.status);
       
       const responseText = await response.text();
-      console.log('Create wallet response body:', responseText);
 
       let responseData;
       try {
@@ -467,7 +456,6 @@ export const WalletManagement = () => {
       }
 
       if (response.ok) {
-        console.log('✅ Wallet created successfully:', responseData);
         toast.success('Wallet created successfully!');
         
         if (responseData.data) {
@@ -483,7 +471,6 @@ export const WalletManagement = () => {
           await checkWalletStatus();
         }
       } else {
-        console.log('❌ Wallet creation failed:', responseData);
         if (responseData.message?.includes('already exists') || response.status === 400) {
           toast.info('Wallet already exists. Loading wallet data...');
           await checkWalletStatus();
@@ -492,7 +479,6 @@ export const WalletManagement = () => {
         }
       }
     } catch (error: any) {
-      console.error('❌ Wallet creation failed:', error);
       if (error.message?.includes('already exists')) {
         toast.info('Wallet already exists. Loading wallet data...');
         await checkWalletStatus();
@@ -535,8 +521,6 @@ export const WalletManagement = () => {
         }
       };
 
-      console.log('Sending deposit request:', requestBody);
-
       const response = await fetch('https://verinest.up.railway.app/api/wallet/deposit', {
         method: 'POST',
         headers: {
@@ -567,7 +551,6 @@ export const WalletManagement = () => {
         }
       }
     } catch (error: any) {
-      console.error('Deposit failed:', error);
       const errorMessage = error.message || 'Deposit failed. Please try again.';
       setDepositError(errorMessage);
       toast.error(errorMessage);
@@ -586,7 +569,6 @@ export const WalletManagement = () => {
           clearInterval(pollInterval);
         }
       } catch (error) {
-        console.error('Fallback polling error:', error);
       }
     }, 10000);
 
@@ -594,63 +576,6 @@ export const WalletManagement = () => {
       clearInterval(pollInterval);
       localStorage.removeItem('pending_payment_reference');
     }, 300000);
-  };
-
-  const testDepositWithExactFormat = async () => {
-    setLoading(true);
-    try {
-      const testData = {
-        amount: 1000.0,
-        payment_method: "Card",
-        description: "Test wallet deposit",
-        metadata: {
-          source: "web_app_test",
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      console.log('Testing with exact format:', testData);
-
-      const response = await fetch('https://verinest.up.railway.app/api/wallet/deposit', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        } as HeadersInit,
-        body: JSON.stringify(testData),
-      });
-
-      const responseText = await response.text();
-      console.log('Test response status:', response.status);
-      console.log('Test response body:', responseText);
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { raw: responseText };
-      }
-
-      if (response.ok) {
-        toast.success('✅ Deposit test successful! Format is correct.');
-        console.log('✅ Successful response:', responseData);
-      } else {
-        toast.error(`❌ Test failed: ${response.status} ${responseData.message || ''}`);
-        console.log('❌ Error response:', responseData);
-        
-        if (responseData.errors) {
-          console.log('Validation errors:', responseData.errors);
-        }
-      }
-
-      return { status: response.status, data: responseData };
-    } catch (error: any) {
-      console.error('Test failed:', error);
-      toast.error(`Test error: ${error.message}`);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleWithdrawRequest = async (requestBody: any) => {
@@ -717,6 +642,10 @@ export const WalletManagement = () => {
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Check if user has PIN set up
+    const hasPin = await checkTransactionPin();
+    if (!hasPin) return;
+
     setLoading(true);
     try {
       const withdrawAmount = parseFloat(withdrawData.amount);
@@ -751,7 +680,16 @@ export const WalletManagement = () => {
         }
       };
 
-      await handleWithdrawRequest(requestBody);
+      // await handleWithdrawRequest(requestBody);
+      // Set up pending transaction and show PIN modal
+    setPendingTransaction({
+      type: 'withdrawal',
+      data: requestBody,
+      callback: async (pin: string) => {
+        await handleWithdrawRequest({ ...requestBody, transaction_pin: pin });
+      }
+    });
+    setShowPinModal(true);
       
     } catch (error: any) {
       console.error('Withdrawal failed:', error);
@@ -855,9 +793,6 @@ const handleTransferRequest = async (requestBody: any) => {
   });
 
   const responseText = await response.text();
-  console.log('📨 Transfer response status:', response.status);
-  console.log('📨 Transfer response body:', responseText);
-
   let responseData;
   try {
     responseData = JSON.parse(responseText);
@@ -897,6 +832,11 @@ const handleTransferRequest = async (requestBody: any) => {
 
 const handleTransfer = async (e: React.FormEvent) => {
   e.preventDefault();
+
+  // Check if user has PIN set up
+  const hasPin = await checkTransactionPin();
+  if (!hasPin) return;
+
   setLoading(true);
   try {
     const transferAmount = parseFloat(transferData.amount);
@@ -922,15 +862,39 @@ const handleTransfer = async (e: React.FormEvent) => {
       description: transferData.description || 'Fund transfer'
     };
 
-    console.log('🔄 Sending transfer request:', requestBody);
-    await handleTransferRequest(requestBody);
+    // await handleTransferRequest(requestBody);
+    setPendingTransaction({
+      type: 'transfer',
+      data: requestBody,
+      callback: async (pin: string) => {
+        await handleTransferRequest({ ...requestBody, transaction_pin: pin });
+      }
+    });
+    setShowPinModal(true);
 
   } catch (error: any) {
-    console.error('❌ Transfer failed:', error);
     toast.error(error.message || 'Transfer failed. Please try again.');
   } finally {
     setLoading(false);
   }
+};
+
+// Add the PIN verification handler
+const handlePinVerify = async (pin: string) => {
+  if (pendingTransaction) {
+    try {
+      await pendingTransaction.callback(pin);
+    } catch (error: any) {
+      toast.error(error.message || 'Transaction failed');
+    }
+  }
+  setPendingTransaction(null);
+};
+
+// Add the PIN setup completion handler
+const handlePinSetupComplete = () => {
+  toast.success('Transaction PIN set up successfully!');
+  setShowPinSetup(false);
 };
 
 /////
@@ -939,7 +903,6 @@ const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      console.log('🔄 Adding bank account...', bankAccountData);
       
       const response = await fetch('https://verinest.up.railway.app/api/wallet/bank-accounts', {
         method: 'POST',
@@ -949,11 +912,8 @@ const handleTransfer = async (e: React.FormEvent) => {
         } as HeadersInit,
         body: JSON.stringify(bankAccountData),
       });
-
-      console.log('Add bank account response status:', response.status);
       
       const responseText = await response.text();
-      console.log('Add bank account response:', responseText);
 
       let responseData;
       try {
@@ -980,7 +940,6 @@ const handleTransfer = async (e: React.FormEvent) => {
         }
       }
     } catch (error: any) {
-      console.error('Failed to add bank account:', error);
       toast.error(error.message || 'Failed to add bank account');
     } finally {
       setLoading(false);
@@ -1004,7 +963,6 @@ const handleTransfer = async (e: React.FormEvent) => {
         throw new Error('Failed to set primary account');
       }
     } catch (error: any) {
-      console.error('Failed to set primary account:', error);
       toast.error(error.message || 'Failed to set primary account');
     }
   };
@@ -1418,18 +1376,6 @@ const handleTransfer = async (e: React.FormEvent) => {
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Processing...' : 'Continue to Payment'}
                 </Button>
-
-                <div className="text-center">
-                  <Button
-                    type="button"
-                    variant="link"
-                    onClick={testDepositWithExactFormat}
-                    disabled={loading}
-                    className="text-xs"
-                  >
-                    Test Deposit Format
-                  </Button>
-                </div>
               </form>
             </CardContent>
           </Card>
@@ -1835,8 +1781,26 @@ const handleTransfer = async (e: React.FormEvent) => {
         </TabsContent>
       </Tabs>
 
-      {/* Transaction PIN Dialog */}
-      <TransactionPinDialog />
+      {/* Transaction PIN Dialog
+      <TransactionPinDialog /> */}
+      <TransactionPinModal
+      isOpen={showPinModal}
+      onClose={() => {
+        setShowPinModal(false);
+        setPendingTransaction(null);
+      }}
+      onVerify={handlePinVerify}
+      transactionType={pendingTransaction?.type || 'payment'}
+      transactionData={pendingTransaction?.data}
+      amount={parseFloat(pendingTransaction?.data.amount || '0')}
+    />
+
+    {/* Transaction PIN Setup Modal */}
+    <TransactionPinSetup
+      isOpen={showPinSetup}
+      onClose={() => setShowPinSetup(false)}
+      onSetupComplete={handlePinSetupComplete}
+    />
     </div>
   );
 };

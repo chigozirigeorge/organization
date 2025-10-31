@@ -1,11 +1,11 @@
-// components/JobsList.tsx - Cleaned up version
+// components/JobsList.tsx - Updated
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { MapPin, Calendar, DollarSign, Clock, Search, LogIn, UserPlus } from 'lucide-react';
+import { MapPin, Calendar, DollarSign, Clock, Search, LogIn, UserPlus, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Job {
@@ -19,8 +19,10 @@ interface Job {
   estimated_duration_days: number;
   created_at: string;
   employer: {
+    id: string;
     name: string;
     username: string;
+    avatar_url?: string;
   };
 }
 
@@ -288,11 +290,11 @@ export const JobsList = () => {
                 <div className="flex justify-between items-start mb-2">
                   <CardTitle className="text-lg leading-tight group-hover:text-primary transition-colors">
                     <Link 
-                          to={`/dashboard/jobs/${job.id}`}
-                          className="hover:text-primary transition-colors"
-                        >
-                          {job.title}
-                        </Link>
+                      to={`/dashboard/jobs/${job.id}`}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {job.title}
+                    </Link>
                   </CardTitle>
                   <Badge variant="secondary" className="shrink-0 ml-2">
                     {job.category}
@@ -319,9 +321,19 @@ export const JobsList = () => {
                   <span>{job.estimated_duration_days} day{job.estimated_duration_days !== 1 ? 's' : ''}</span>
                 </div>
                 
-                <div className="flex justify-between items-center text-xs text-muted-foreground pt-2 border-t">
-                  <span>Posted by {job.employer?.name || 'Employer'}</span>
-                  <span>{formatDate(job.created_at)}</span>
+                {/* Employer Info */}
+                <div className="flex items-center text-sm text-muted-foreground pt-2 border-t">
+                  <User className="h-4 w-4 mr-2" />
+                  <div>
+                    <span className="font-medium">{job.employer?.name || 'Employer'}</span>
+                    {job.employer?.username && (
+                      <span className="text-xs ml-2">@{job.employer.username}</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                  <span>Posted {formatDate(job.created_at)}</span>
                 </div>
               </CardContent>
               
