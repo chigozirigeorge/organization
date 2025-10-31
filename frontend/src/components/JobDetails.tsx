@@ -7,8 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { MapPin, Calendar, DollarSign, Clock, User, ArrowLeft, Building, Shield, Users, FileText, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { WorkerProfileModal } from './WorkerPortfolioModal';
-import { extractWorkerCategory, extractWorkerEmail, extractWorkerExperience, extractWorkerName } from '@/types/labour';
+import { WorkerPortfolioModal } from './WorkerPortfolioModal';
+import { fetchWorkerProfile, CompleteWorkerData } from '../utils/workerUtils';
 
 interface Job {
   id: string;
@@ -57,6 +57,7 @@ interface WorkerProfileApplicationResponse {
 interface JobApplication {
   id: string;
   worker_id: string;
+  worker_user_id?: string;
   worker?: WorkerUserResponse | null;
   worker_profile?: WorkerProfileApplicationResponse | null;
   proposed_rate: number;
@@ -77,6 +78,8 @@ export const JobDetails = () => {
   const [showApplications, setShowApplications] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
+  const [workerProfiles, setWorkerProfiles] = useState<Map<string, CompleteWorkerData>>(new Map());
+  const [loadingProfiles, setLoadingProfiles] = useState<Set<string>>(new Set());
 
   // Check if current user is the job owner
   const isJobOwner = user?.id === job?.employer_id;
@@ -152,67 +155,118 @@ export const JobDetails = () => {
     });
 
     if (response.ok) {
-      const data = await response.json();
-      console.log('🔍 [JobDetails] FULL Applications API Response:', data);
-      
-      // Log each application to see the complete structure
-      if (data.data && data.data.length > 0) {
-        data.data.forEach((app: any, index: number) => {
-          console.log(`📋 Application ${index + 1}:`, app);
-          console.log(`👤 Worker data in app ${index + 1}:`, app.worker);
-          console.log('---');
+        const data = await response.json();
+        console.log('🔍 [JobDetails] Applications API Response:', data);
+        
+        const applicationsData = data.data || data.applications || [];
+        setApplications(applicationsData);
+
+        // Fetch worker profiles for each application
+        applicationsData.forEach((application: JobApplication) => {
+          loadWorkerProfile(application);
         });
+      } else {
+        console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
       }
-      
-      setApplications(data.data || data.applications || []);
+    } catch (error) {
+      console.error('❌ [JobDetails] Error fetching applications:', error);
+    }
+  };
+
+ const loadWorkerProfile = async (application: JobApplication) => {
+  const workerId = application.worker_id; // This is the worker_profile.id
+  
+  console.log('🔍 [loadWorkerProfile] Loading profile for worker ID:', workerId);
+
+  // Skip if already loaded or loading
+  if (workerProfiles.has(workerId) || loadingProfiles.has(workerId)) {
+    return;
+  }
+
+  setLoadingProfiles(prev => new Set(prev).add(workerId));
+
+  try {
+    if (!token) {
+      console.error('❌ [loadWorkerProfile] No token available');
+      return;
+    }
+    
+    // Use the new function that handles worker_id
+    const workerData = await fetchWorkerProfile(workerId, token, true); // true = this is a worker_id
+    if (workerData) {
+      setWorkerProfiles(prev => new Map(prev).set(workerId, workerData));
+      console.log('✅ [loadWorkerProfile] Successfully loaded worker profile');
     } else {
-      console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
-      const errorText = await response.text();
-      console.error('❌ Error response:', errorText);
+      console.error('❌ [loadWorkerProfile] Failed to load worker profile');
     }
   } catch (error) {
-    console.error('❌ [JobDetails] Error fetching applications:', error);
+    console.error('❌ [loadWorkerProfile] Error loading worker profile:', error);
+  } finally {
+    setLoadingProfiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(workerId);
+      return newSet;
+    });
   }
 };
 
- const handleViewWorkerProfile = (workerId: string) => {
-    setSelectedWorker(workerId);
-    setShowWorkerModal(true);
-  };
+// Update the function that loads all worker profiles
+useEffect(() => {
+  if (applications.length > 0) {
+    applications.forEach(application => {
+      loadWorkerProfile(application);
+    });
+  }
+}, [applications]);
 
-  // Update the handleAcceptApplication function
-  const handleAcceptApplication = async (applicationId: string, workerId: string) => {
-    try {
-      console.log('✅ [JobDetails] Accepting application:', applicationId);
+// Update handleViewWorkerProfile
+const handleViewWorkerProfile = async (application: JobApplication) => {
+  const workerId = application.worker_id;
+  
+  // Ensure we have the latest worker data
+  if (!workerProfiles.has(workerId)) {
+    await loadWorkerProfile(application);
+  }
+  setSelectedWorker(workerId);
+  setShowWorkerModal(true);
+};
+
+
+  // In JobDetails.tsx - Update handleAcceptApplication
+const handleAcceptApplication = async (applicationId: string, workerId: string) => {
+  try {
+    console.log('✅ [JobDetails] Accepting application:', applicationId);
+    
+    const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job?.id}/assign`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        worker_id: workerId,
+      }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      toast.success('Worker assigned successfully! Contract created.');
       
-      const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job?.id}/assign`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          worker_id: workerId,
-        }),
-      });
-
-      if (response.ok) {
-        toast.success('Worker assigned successfully!');
-        // Refresh applications
-        if (job?.id) {
-          fetchJobApplications(job.id);
-        }
-        setShowWorkerModal(false);
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to assign worker');
+      // Refresh applications and job data
+      if (job?.id) {
+        fetchJobApplications(job.id);
+        fetchJobDetails(job.id); // Refresh job to show new status
       }
-    } catch (error: any) {
-      console.error('❌ [JobDetails] Error accepting application:', error);
-      toast.error(error.message || 'Failed to assign worker');
+      setShowWorkerModal(false);
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to assign worker');
     }
-  };
-
+  } catch (error: any) {
+    console.error('❌ [JobDetails] Error accepting application:', error);
+    toast.error(error.message || 'Failed to assign worker');
+  }
+};
 
   const handleApply = async () => {
     if (!user || !token) {
@@ -289,9 +343,7 @@ export const JobDetails = () => {
   };
 
 
- // In JobDetails.tsx - Update the renderApplicationsSection function
-// In JobDetails.tsx - Update the renderApplicationsSection function
-const renderApplicationsSection = () => {
+ const renderApplicationsSection = () => {
   if (!isJobOwner || !applications.length) return null;
 
   return (
@@ -306,18 +358,15 @@ const renderApplicationsSection = () => {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Review applications from workers. Click "View Profile" to see worker details.
+            Review applications from workers. Click "View Profile" to see complete worker details.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {applications.map((application: any) => {
-              const workerName = extractWorkerName(application.worker, application.worker_profile, application.worker_id);
-              const workerEmail = extractWorkerEmail(application.worker);
-              const experienceYears = extractWorkerExperience(application.worker_profile);
-              const workerCategory = extractWorkerCategory(application.worker_profile);
-
-              const hasProfileData = application.worker_profile !== null;
+            {applications.map((application) => {
+              const userIdToUse = application.worker_user_id || application.worker_id;
+              const workerProfile = workerProfiles.get(userIdToUse);
+              const isLoading = loadingProfiles.has(userIdToUse);
 
               return (
                 <Card key={application.id} className="p-4 hover:shadow-md transition-shadow">
@@ -329,11 +378,15 @@ const renderApplicationsSection = () => {
                           <User className="h-4 w-4 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium">{workerName}</p>
+                          <p className="font-medium">
+                            {workerProfile?.user?.name || application.worker?.name || `Worker ${application.worker_id.substring(0, 8)}`}
+                          </p>
                           <div className="text-sm text-muted-foreground">
-                            <p>{workerEmail}</p>
-                            {experienceYears > 0 && (
-                              <p>{experienceYears} years experience • {workerCategory}</p>
+                            <p>{workerProfile?.user?.email || application.worker?.email || 'Email not available'}</p>
+                            {workerProfile?.profile && (
+                              <p>
+                                {workerProfile.profile.experience_years} years experience • {workerProfile.profile.category}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -345,7 +398,7 @@ const renderApplicationsSection = () => {
                         </Badge>
                       </div>
 
-                      {/* Application Details */}
+                      {/* Rest of the application details remain the same */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         <div className="flex items-center">
                           <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -357,7 +410,6 @@ const renderApplicationsSection = () => {
                         </div>
                       </div>
 
-                      {/* Cover Letter */}
                       <div>
                         <p className="text-sm font-medium mb-1">Cover Letter:</p>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-slate-50 p-3 rounded">
@@ -365,11 +417,18 @@ const renderApplicationsSection = () => {
                         </p>
                       </div>
 
-                      {/* Profile Availability Indicator */}
-                      {!hasProfileData && (
+                      {/* Profile Status */}
+                      {!workerProfile && !isLoading && (
                         <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
                           <span className="text-xs">ℹ️</span>
                           <span>Full profile not available - basic contact information shown</span>
+                        </div>
+                      )}
+
+                      {isLoading && (
+                        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-2 rounded">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span>Loading worker profile...</span>
                         </div>
                       )}
                     </div>
@@ -379,20 +438,19 @@ const renderApplicationsSection = () => {
                       <div className="flex flex-col gap-2 ml-4">
                         <Button
                           size="sm"
-                          onClick={() => {
-                            setSelectedWorker(application.worker_id);
-                            setShowWorkerModal(true);
-                          }}
+                          onClick={() => handleViewWorkerProfile(application)}
                           variant="outline"
                           className="flex items-center gap-1"
+                          disabled={isLoading}
                         >
                           <User className="h-3 w-3" />
-                          View Profile
+                          {isLoading ? 'Loading...' : 'View Profile'}
                         </Button>
                         <Button
                           size="sm"
                           onClick={() => handleAcceptApplication(application.id, application.worker_id)}
                           className="flex items-center gap-1"
+                          disabled={isLoading}
                         >
                           <Users className="h-3 w-3" />
                           Accept & Assign
@@ -415,20 +473,22 @@ const renderApplicationsSection = () => {
         </CardContent>
       </Card>
 
-      {/* Worker Profile Modal - Pass both worker data and profile */}
-      <WorkerProfileModal
+      {/* Worker Profile Modal */}
+      <WorkerPortfolioModal
         workerId={selectedWorker || ''}
-        workerData={applications.find(app => app.worker_id === selectedWorker)?.worker || null}
-        workerProfile={applications.find(app => app.worker_id === selectedWorker)?.worker_profile || null}
+        workerData={selectedWorker ? (workerProfiles.get(selectedWorker) || null) : null}
         isOpen={showWorkerModal}
         onClose={() => {
           setShowWorkerModal(false);
           setSelectedWorker(null);
         }}
         onAssign={(workerId) => {
-          const application = applications.find(app => app.worker_id === workerId);
+          const application = applications.find(app => {
+            const appUserId = app.worker_user_id || app.worker_id;
+            return appUserId === workerId;
+          });
           if (application) {
-            handleAcceptApplication(application.id, workerId);
+            handleAcceptApplication(application.id, application.worker_id);
           }
         }}
         jobId={job?.id}
@@ -436,6 +496,7 @@ const renderApplicationsSection = () => {
     </>
   );
 };
+
 
   // Render apply section for workers (not job owners)
 const renderApplySection = () => {

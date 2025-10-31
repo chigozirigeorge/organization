@@ -15,6 +15,8 @@ export interface WorkerProfile {
   is_verified: boolean;
   created_at: string;
   updated_at: string;
+  completed_jobs?: number;
+  is_available?: boolean;
 }
 
 export interface Job {
@@ -39,6 +41,15 @@ export interface Job {
   };
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkerUserResponse {
+  id: string;
+  name: string;
+  email: string;
+  username?: string;
+  trust_score?: number;
+  verified?: boolean;
 }
 
 export interface JobApplication {

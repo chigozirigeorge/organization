@@ -1,4 +1,4 @@
-// components/Dashboard.tsx - Fixed TypeScript errors
+// components/Dashboard.tsx - Updated with Customer Service and Chat
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,8 +23,8 @@ import {
   AlertCircle, Briefcase, UserPlus, Wallet, Home, Settings, FileText, 
   TrendingUp, Users, Star, Shield, CreditCard, SettingsIcon, Menu, X,
   UserCheck, ShieldCheck, BarChart3, Building, ClipboardList, MessageSquare,
-  DollarSign, Clock, Calendar, Award, Target, LucideIcon,
-  Image as ImageIcon // Rename to avoid conflict
+  DollarSign, Clock, Calendar, Award, Target, LucideIcon, HeadphonesIcon,
+  Image as ImageIcon, MessageCircle, CheckCircle
 } from 'lucide-react';
 import { RoleSelection } from '@/components/RoleSelection';
 import { toast } from 'sonner';
@@ -37,6 +37,10 @@ import { WorkersList } from '@/components/WorkersList';
 import { JobDetails } from '@/components/JobDetails';
 import { JobApplication } from '@/components/JobApplication';
 import { CreateJobApplication } from '@/components/CreateJobApplication';
+import { CustomerServiceDashboard } from '@/components/CustomerServiceDashboard';
+import { ChatSystem } from '@/components/ChatSystem';
+import { SupportTickets } from '@/components/SupportTickets';
+import { WorkerProfile } from '@/components/WorkerProfile';
 
 // Define interfaces for better TypeScript support
 interface DashboardStat {
@@ -46,6 +50,7 @@ interface DashboardStat {
   color: string;
   bgColor: string;
   description: string;
+  id?: string; // Optional ID for navigation
 }
 
 interface NavigationItem {
@@ -54,6 +59,7 @@ interface NavigationItem {
   icon: LucideIcon;
   description: string;
   path: string;
+  badge?: number; // Optional badge for notifications/unread messages
 }
 
 const Dashboard = () => {
@@ -70,7 +76,9 @@ const Dashboard = () => {
     pendingApplications: 0,
     pendingVerifications: 0,
     totalUsers: 0,
-    platformRevenue: 0
+    platformRevenue: 0,
+    supportTickets: 0,
+    unreadMessages: 0
   });
 
   useEffect(() => {
@@ -86,29 +94,35 @@ const Dashboard = () => {
     return <RoleSelection />;
   }
 
- const getCurrentSection = () => {
+  const getCurrentSection = () => {
   const path = location.pathname;
-   console.log('🔍 Dashboard Route Detection - Current path:', path);
+  console.log('🔍 Dashboard Route Detection - Current path:', path);
 
+  // Worker routes - ADD THIS
+  if (path.includes('/dashboard/workers') && !path.includes('/workers/')) return 'workers';
+  
   // Job-related routes
   if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
   if (path.includes('/dashboard/jobs/create')) return 'create-job';
-  if (path.includes('/dashboard/jobs/') && path.includes('/apply')) return 'job-apply'; // NEW
-  // if (path.match(/\/dashboard\/jobs\/[^/]+\/apply/)) return 'job-apply'; // More specific regex
-  if (path.match(/\/dashboard\/jobs\/[^/]+$/)) return 'job-details'; // Job details without apply
+  if (path.includes('/dashboard/jobs/') && path.includes('/apply')) return 'job-apply';
+  if (path.match(/\/dashboard\/jobs\/[^/]+$/)) return 'job-details';
   if (path.includes('/dashboard/jobs/') && !path.includes('/apply')) return 'job-details';
-  if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
   
-  // Worker routes
+  // Worker profile routes
   if (path.includes('/dashboard/worker/portfolio')) return 'portfolio';
   if (path.includes('/dashboard/worker/profile')) return 'worker-setup';
+  if (path.includes('/dashboard/workers/') && path.split('/').length === 4) return 'worker-profile';
+  
+  // Chat and Support routes
+  if (path.includes('/dashboard/chat')) return 'chat';
+  if (path.includes('/dashboard/support')) return 'support';
+  if (path.includes('/dashboard/customer-service')) return 'customer-service';
   
   // Other routes
   if (path.includes('/dashboard/wallet')) return 'wallet';
   if (path.includes('/dashboard/my-jobs')) return 'my-jobs';
   if (path.includes('/dashboard/contracts')) return 'contracts';
   if (path.includes('/dashboard/settings')) return 'settings';
-  if (path.includes('/dashboard/workers')) return 'workers';
   
   return 'home';
 };
@@ -136,6 +150,8 @@ const Dashboard = () => {
         endpoint = 'https://verinest.up.railway.app/api/verification/admin/pending';
       } else if (user?.role === 'admin') {
         endpoint = 'https://verinest.up.railway.app/api/users/admin/users?limit=100';
+      } else if (user?.role === 'customer_care') {
+        endpoint = 'https://verinest.up.railway.app/api/support/stats';
       }
 
       if (endpoint) {
@@ -166,9 +182,32 @@ const Dashboard = () => {
                 u.verification_status === 'pending'
               ).length
             }));
+          } else if (user?.role === 'customer_care') {
+            setDashboardStats(prev => ({
+              ...prev,
+              supportTickets: data.pending_tickets || 0,
+              totalUsers: data.total_users || 0
+            }));
           } else {
             setDashboardStats(data.stats || data);
           }
+        }
+      }
+
+      // Fetch unread messages count for all users
+      if (user) {
+        const messagesResponse = await fetch('https://verinest.up.railway.app/api/chat/unread-count', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          setDashboardStats(prev => ({
+            ...prev,
+            unreadMessages: messagesData.unread_count || 0
+          }));
         }
       }
     } catch (error) {
@@ -182,7 +221,7 @@ const Dashboard = () => {
     </div>
   );
 
-  // Enhanced role-based stats with professional design - FIXED TypeScript
+  // Enhanced role-based stats with professional design
   const getRoleBasedStats = (): DashboardStat[] => {
     const baseStats: DashboardStat[] = [];
     
@@ -326,6 +365,41 @@ const Dashboard = () => {
           description: 'This month'
         },
       ];
+    } else if (user.role === 'customer_care') {
+      return [
+        { 
+          label: 'Pending Tickets', 
+          value: dashboardStats.supportTickets, 
+          icon: HeadphonesIcon, 
+          color: 'text-blue-600', 
+          bgColor: 'bg-blue-50',
+          description: 'Awaiting response'
+        },
+        { 
+          label: 'Total Users', 
+          value: dashboardStats.totalUsers, 
+          icon: Users, 
+          color: 'text-green-600', 
+          bgColor: 'bg-green-50',
+          description: 'Platform users'
+        },
+        { 
+          label: 'Resolved Today', 
+          value: '24', 
+          icon: CheckCircle, 
+          color: 'text-emerald-600', 
+          bgColor: 'bg-emerald-50',
+          description: 'Completed tickets'
+        },
+        { 
+          label: 'Response Time', 
+          value: '2.3h', 
+          icon: Clock, 
+          color: 'text-orange-600', 
+          bgColor: 'bg-orange-50',
+          description: 'Average response'
+        },
+      ];
     }
     return baseStats;
   };
@@ -336,24 +410,46 @@ const Dashboard = () => {
   };
 
   const renderActiveSection = () => {
-
     const pathSegments = location.pathname.split('/');
     const jobId = pathSegments[3];
+    const workerId = pathSegments[3];
 
     // Handle job browsing for all roles
-  if (activeSection === 'jobs') {
-    return <JobsList />;
+    if (activeSection === 'jobs') {
+      return <JobsList />;
+    }
+
+    if (pathSegments[2] === 'workers' && pathSegments[3] && pathSegments.length === 4) {
+    const workerId = pathSegments[3];
+  console.log('👤 Loading worker profile for ID:', workerId);
+  return <WorkerProfile key={workerId} workerId={workerId} />;
   }
 
-  // Handle job details view
-  if (activeSection === 'job-details') {
-    return <JobDetails key={jobId}/>;
-  }
 
-  // Handle job application view - NEW
-  if (activeSection === 'job-apply') {
-    return <CreateJobApplication key={jobId} />;
-  }
+    // Handle job details view
+    if (activeSection === 'job-details') {
+      return <JobDetails key={jobId}/>;
+    }
+
+    // Handle job application view
+    if (activeSection === 'job-apply') {
+      return <CreateJobApplication key={jobId} />;
+    }
+
+    // Handle chat system
+    if (activeSection === 'chat') {
+      return <ChatSystem />;
+    }
+
+    // Handle support tickets for regular users
+    if (activeSection === 'support') {
+      return <SupportTickets />;
+    }
+
+    // Handle customer service dashboard
+    if (activeSection === 'customer-service') {
+      return <CustomerServiceDashboard />;
+    }
 
     // Always show role-specific dashboard for 'home' section
     if (activeSection === 'home') {
@@ -366,8 +462,9 @@ const Dashboard = () => {
           return <VerifierDashboard />;
         case 'admin':
           return <AdminDashboard />;
+        case 'customer_care':
+          return <CustomerServiceDashboard />;
         default:
-          // For users without role or basic users, show jobs list
           return <JobsList />;
       }
     }
@@ -395,12 +492,12 @@ const Dashboard = () => {
       case 'settings':
         return <Setting />;
       case 'portfolio':
-      return <WorkerPortfolio />;
-    case 'workers': // Add this for employer worker browsing
-      return <WorkersList />;
+        return <WorkerPortfolio />;
+      case 'workers':
+        return <WorkersList />;
       default:
         if (location.pathname.includes('/dashboard/jobs/') && !location.pathname.includes('/apply')) {
-        return <JobDetails />;
+          return <JobDetails />;
         }
         // Fallback to role-specific dashboard
         switch (user.role) {
@@ -412,13 +509,15 @@ const Dashboard = () => {
             return <VerifierDashboard />;
           case 'admin':
             return <AdminDashboard />;
+          case 'customer_care':
+            return <CustomerServiceDashboard />;
           default:
             return <JobsList />;
         }
     }
   };
 
-  // Enhanced navigation items based on role - FIXED TypeScript
+  // Enhanced navigation items based on role
   const getNavigationItems = (): NavigationItem[] => {
     const baseItems: NavigationItem[] = [
       {
@@ -434,12 +533,32 @@ const Dashboard = () => {
         icon: Wallet,
         description: 'Manage funds',
         path: '/dashboard/wallet'
+      },
+      {
+        id: 'chat',
+        label: 'Messages',
+        icon: MessageCircle,
+        description: 'Chat with users',
+        path: '/dashboard/chat',
+        badge: dashboardStats.unreadMessages > 0 ? dashboardStats.unreadMessages : undefined
+      }
+    ];
+
+    // Common items for all roles
+    const commonItems = [
+      ...baseItems,
+      {
+        id: 'support',
+        label: 'Support',
+        icon: HeadphonesIcon,
+        description: 'Get help & support',
+        path: '/dashboard/support'
       }
     ];
 
     if (user.role === 'worker') {
       return [
-        ...baseItems,
+        ...commonItems,
         {
           id: 'jobs',
           label: 'Browse Jobs',
@@ -457,7 +576,7 @@ const Dashboard = () => {
         {
           id: 'portfolio',
           label: 'My Portfolio',
-          icon: ImageIcon, // Use the renamed import
+          icon: ImageIcon,
           description: 'Showcase your work',
           path: '/dashboard/worker/portfolio'
         },
@@ -468,17 +587,10 @@ const Dashboard = () => {
           description: 'Active contracts',
           path: '/dashboard/contracts'
         },
-        // {
-        //   id: 'settings',
-        //   label: 'Settings',
-        //   icon: SettingsIcon,
-        //   description: 'Account settings',
-        //   path: '/dashboard/settings'
-        // }
       ];
     } else if (user.role === 'employer') {
       return [
-        ...baseItems,
+        ...commonItems,
         {
           id: 'create-job',
           label: 'Post Job',
@@ -487,7 +599,7 @@ const Dashboard = () => {
           path: '/dashboard/jobs/create'
         },
         {
-          id: 'jobs',
+          id: 'workers',
           label: 'Browse Workers',
           icon: Users,
           description: 'Find talent',
@@ -507,53 +619,57 @@ const Dashboard = () => {
           description: 'Worker agreements',
           path: '/dashboard/contracts'
         },
-        // {
-        //   id: 'settings',
-        //   label: 'Settings',
-        //   icon: SettingsIcon,
-        //   description: 'Account settings',
-        //   path: '/dashboard/settings'
-        // }
       ];
     } else if (user.role === 'verifier') {
       return [
-        ...baseItems,
+        ...commonItems,
         {
           id: 'verifications',
           label: 'Verifications',
           icon: UserCheck,
           description: 'Review documents',
-          path: '/dashboard'
+          path: '/dashboard/verifications'
         },
-        {
-          id: 'settings',
-          label: 'Settings',
-          icon: SettingsIcon,
-          description: 'Account settings',
-          path: '/dashboard/settings'
-        }
       ];
     } else if (user.role === 'admin') {
       return [
-        ...baseItems,
+        ...commonItems,
         {
           id: 'admin',
           label: 'Admin Panel',
           icon: Shield,
           description: 'Platform management',
-          path: '/dashboard'
+          path: '/dashboard/admin'
         },
         {
-          id: 'settings',
-          label: 'Settings',
-          icon: SettingsIcon,
-          description: 'Account settings',
-          path: '/dashboard/settings'
-        }
+          id: 'users',
+          label: 'User Management',
+          icon: Users,
+          description: 'Manage all users',
+          path: '/dashboard/users'
+        },
+      ];
+    } else if (user.role === 'customer_care') {
+      return [
+        ...baseItems,
+        {
+          id: 'customer-service',
+          label: 'Customer Service',
+          icon: HeadphonesIcon,
+          description: 'Manage support tickets',
+          path: '/dashboard/customer-service'
+        },
+        {
+          id: 'tickets',
+          label: 'All Tickets',
+          icon: ClipboardList,
+          description: 'View all support tickets',
+          path: '/dashboard/tickets'
+        },
       ];
     }
 
-    return baseItems;
+    return commonItems;
   };
 
   const navigationItems = getNavigationItems();
@@ -561,8 +677,8 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      {/* Fixed Navbar with proper props */}
-      <Navbar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      {/* Fixed Navbar with proper props - REMOVED DUPLICATE MENU */}
+      <Navbar />
       
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
@@ -592,14 +708,14 @@ const Dashboard = () => {
                   <p className="text-xs text-slate-500 capitalize">{user.role}</p>
                 </div>
               </div>
-              <Button
+              {/* <Button
                 variant="ghost"
                 size="sm"
                 className="lg:hidden"
                 onClick={() => setSidebarOpen(false)}
               >
                 <X className="h-4 w-4" />
-              </Button>
+              </Button> */}
             </div>
 
             {/* User Profile Card */}
@@ -611,6 +727,9 @@ const Dashboard = () => {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-slate-800 truncate">{user.name}</h3>
                   <p className="text-sm text-slate-500 truncate">{user.email}</p>
+                  {user.username && (
+                    <p className="text-xs text-slate-400 truncate">@{user.username}</p>
+                  )}
                 </div>
               </div>
               
@@ -632,14 +751,21 @@ const Dashboard = () => {
                 <Button
                   key={item.id}
                   variant={activeSection === item.id ? 'default' : 'ghost'}
-                  className="w-full justify-start h-12 px-4 rounded-xl transition-all duration-200 hover:shadow-md"
+                  className="w-full justify-start h-12 px-4 rounded-xl transition-all duration-200 hover:shadow-md relative"
                   onClick={() => handleNavigation(item.path)}
                 >
                   <item.icon className={`h-4 w-4 mr-3 ${
                     activeSection === item.id ? 'text-white' : 'text-slate-600'
                   }`} />
                   <div className="text-left flex-1">
-                    <div className="font-medium">{item.label}</div>
+                    <div className="font-medium flex items-center gap-2">
+                      {item.label}
+                      {item.badge && item.badge > 0 && (
+                        <Badge variant="destructive" className="h-5 w-5 p-0 text-xs flex items-center justify-center">
+                          {item.badge > 9 ? '9+' : item.badge}
+                        </Badge>
+                      )}
+                    </div>
                     <div className={`text-xs ${
                       activeSection === item.id ? 'text-white/80' : 'text-slate-500'
                     }`}>
@@ -678,12 +804,14 @@ const Dashboard = () => {
                   {user.role === 'employer' && 'Manage your workforce efficiently'}
                   {user.role === 'verifier' && 'Review and verify user documents'}
                   {user.role === 'admin' && 'Complete platform oversight and management'}
+                  {user.role === 'customer_care' && 'Help users with their inquiries and issues'}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant="secondary" className="capitalize">
                   {user.role}
                 </Badge>
+                {/* Single menu button - removed duplicate */}
                 <Button
                   variant="outline"
                   size="sm"
@@ -716,16 +844,16 @@ const Dashboard = () => {
           {/* KYC Verification Status */}
           <Card className="mb-6 shadow-sm border-slate-200/60">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center justify-between text-lg">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <ShieldCheck className="h-5 w-5 text-slate-600" />
                   Identity Verification Status
-                </div>
                 </CardTitle>
                 <Button variant="outline" size="sm" onClick={checkKYCStatus}>
                   Refresh Status
                 </Button>
-              </CardHeader>
+              </div>
+            </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div>
@@ -795,7 +923,8 @@ const Dashboard = () => {
               {roleStats.map((stat, index) => (
                 <Card 
                   key={index} 
-                  className="border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                  className="border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden group cursor-pointer"
+                  onClick={() => stat.id && handleNavigation(stat.id)}
                 >
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
@@ -810,14 +939,14 @@ const Dashboard = () => {
                           {stat.description}
                         </p>
                       </div>
-                      <div className={`p-3 rounded-xl ${stat.bgColor}`}>
+                      <div className={`p-3 rounded-xl ${stat.bgColor} group-hover:scale-110 transition-transform duration-200`}>
                         <stat.icon className={`h-6 w-6 ${stat.color}`} />
                       </div>
                     </div>
                     {/* Progress bar for visual appeal */}
                     <div className="mt-4 w-full bg-slate-200 rounded-full h-1">
                       <div 
-                        className={`h-1 rounded-full ${stat.bgColor.replace('bg-', 'bg-')} transition-all duration-1000`}
+                        className={`h-1 rounded-full ${stat.bgColor} transition-all duration-1000`}
                         style={{ width: '85%' }}
                       ></div>
                     </div>

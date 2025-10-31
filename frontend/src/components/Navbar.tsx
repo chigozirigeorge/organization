@@ -192,7 +192,7 @@ export const Navbar = ({ onMenuToggle }: NavbarProps) => {
               <NotificationCenter />
               
               {/* Mobile User Avatar */}
-              <DropdownMenu>
+              {/* <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
                     <div className="flex items-center justify-center h-9 w-9 rounded-full bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-xs">
@@ -237,7 +237,7 @@ export const Navbar = ({ onMenuToggle }: NavbarProps) => {
                     Logout
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
+              </DropdownMenu> */}
             </div>
           )}
         </div>

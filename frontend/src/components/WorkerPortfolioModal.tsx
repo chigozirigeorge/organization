@@ -1,87 +1,40 @@
-// components/WorkerProfileModal.tsx - Fixed version
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+// components/WorkerPortfolioModal.tsx - Updated
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { X, User, MapPin, Star, Calendar, Briefcase, Image as ImageIcon, Mail, Phone, Clock, Award } from 'lucide-react';
-import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { ScrollArea } from './ui/scroll-area';
 import { 
-  extractWorkerName, 
-  extractWorkerEmail, 
-  extractWorkerExperience, 
-  extractWorkerCategory,
-  extractWorkerLocation,
-  extractWorkerDescription,
-  extractWorkerHourlyRate,
-  extractWorkerDailyRate,
-  extractWorkerSkills,
-  WorkerUserResponse,
-  WorkerProfileApplicationResponse
-} from '../types/labour';
+  MapPin, Star, Briefcase, Calendar, DollarSign, User, Award, 
+  CheckCircle, Clock, ExternalLink, X, Users, FileText, MessageCircle
+} from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { CompleteWorkerData } from '../utils/workerUtils';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
-interface PortfolioItem {
-  id: string;
-  title: string;
-  description: string;
-  image_url: string;
-  project_date: string;
-}
-
-interface WorkerProfileModalProps {
+interface WorkerPortfolioModalProps {
   workerId: string;
-  workerData: WorkerUserResponse | null;
-  workerProfile: WorkerProfileApplicationResponse | null;
+  workerData: CompleteWorkerData | null;
   isOpen: boolean;
   onClose: () => void;
-  onAssign?: (workerId: string) => void;
+  onAssign: (workerId: string) => void;
   jobId?: string;
 }
 
-export const WorkerProfileModal = ({ 
-  workerId, 
-  workerData, 
-  workerProfile, 
-  isOpen, 
-  onClose, 
-  onAssign, 
-  jobId 
-}: WorkerProfileModalProps) => {
-  const { token } = useAuth();
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen && workerId) {
-      fetchWorkerPortfolio();
-    }
-  }, [isOpen, workerId]);
-
-  const fetchWorkerPortfolio = async () => {
-    try {
-      setLoading(true);
-      
-      console.log('🖼️ [WorkerProfileModal] Fetching portfolio for worker:', workerId);
-      
-      const response = await fetch(`https://verinest.up.railway.app/api/labour/workers/${workerId}/portfolio`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ [WorkerProfileModal] Portfolio response:', data);
-        setPortfolio(data.data || data.portfolio || []);
-      } else {
-        console.log('⚠️ [WorkerProfileModal] Portfolio not available');
-      }
-    } catch (error) {
-      console.log('⚠️ [WorkerProfileModal] Portfolio fetch failed, using application data only');
-    } finally {
-      setLoading(false);
-    }
-  };
+export const WorkerPortfolioModal = ({
+  workerId,
+  workerData,
+  isOpen,
+  onClose,
+  onAssign,
+  jobId
+}: WorkerPortfolioModalProps) => {
+  const [activeTab, setActiveTab] = useState('profile');
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -91,240 +44,293 @@ export const WorkerProfileModal = ({
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-NG', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  if (!workerData) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Worker Profile</DialogTitle>
+          </DialogHeader>
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p>Loading worker profile...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const { user: workerUser, profile, portfolio, reviews } = workerData;
+
+  const handleStartChat = async () => {
+    if (!user || user.role !== 'employer') {
+      alert('Only employers can start chats with workers');
+      return;
+    }
+  
+    try {
+      navigate('/dashboard/chat', { 
+        state: { 
+          workerUserId: workerUser.id, // This should be the worker's user ID
+          autoSelectChat: true 
+        } 
+      });
+      onClose(); // Close the modal
+    } catch (error) {
+      console.error('Failed to start chat:', error);
+      toast.error('Failed to start chat. Please try again.');
+    }
   };
 
-  if (!isOpen) return null;
-
-  // Extract data from application response using helper functions
-  const workerName = extractWorkerName(workerData, workerProfile, workerId);
-  const workerEmail = extractWorkerEmail(workerData);
-  const experienceYears = extractWorkerExperience(workerProfile);
-  const workerCategory = extractWorkerCategory(workerProfile);
-  const workerLocation = extractWorkerLocation(workerProfile);
-  const workerDescription = extractWorkerDescription(workerProfile);
-  const hourlyRate = extractWorkerHourlyRate(workerProfile);
-  const dailyRate = extractWorkerDailyRate(workerProfile);
-  const workerSkills = extractWorkerSkills(workerProfile);
-
-  const hasProfileData = workerProfile !== null;
-  const hasPortfolio = portfolio.length > 0;
-  const hasRates = hourlyRate > 0 || dailyRate > 0;
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-6 border-b">
-          <div>
-            <h2 className="text-2xl font-bold">Worker Profile</h2>
-            {!hasProfileData && (
-              <Badge variant="outline" className="mt-1 bg-yellow-50 text-yellow-700">
-                Basic Information
-              </Badge>
-            )}
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Worker Profile: {workerUser?.name || 'Unknown Worker'}
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="p-6 space-y-6">
-          {/* Basic Info Header */}
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-              <User className="h-8 w-8 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold">{workerName}</h3>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                <div className="flex items-center gap-1">
-                  <Mail className="h-4 w-4" />
-                  <span>{workerEmail}</span>
-                </div>
-                {experienceYears > 0 && (
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    <span>{experienceYears} years experience</span>
-                  </div>
-                )}
-                {workerLocation !== 'Location not specified' && (
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    <span>{workerLocation}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            {!hasProfileData && (
-              <Badge variant="outline" className="bg-amber-50 text-amber-700">
-                Contact for Details
-              </Badge>
-            )}
-          </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+          </TabsList>
 
-          {/* Professional Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5" />
-                Professional Information
-                {!hasProfileData && (
-                  <Badge variant="outline" className="text-xs">
-                    Limited Info
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="font-medium">Specialization</p>
-                  <Badge variant="secondary" className="mt-1">
-                    {workerCategory}
-                  </Badge>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Experience</p>
-                  <p className="text-lg font-semibold">
-                    {experienceYears} {experienceYears === 1 ? 'year' : 'years'}
-                  </p>
-                </div>
-
-                {hasRates && (
-                  <>
-                    {hourlyRate > 0 && (
-                      <div>
-                        <p className="font-medium">Hourly Rate</p>
-                        <p className="text-xl font-bold text-green-600">
-                          {formatCurrency(hourlyRate)}
-                        </p>
+          {/* Profile Tab */}
+          <TabsContent value="profile" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column - Basic Info */}
+              <div className="lg:col-span-1 space-y-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex flex-col items-center text-center space-y-4">
+                      <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                        {workerUser?.name?.charAt(0).toUpperCase() || 'W'}
                       </div>
-                    )}
-                    {dailyRate > 0 && (
                       <div>
-                        <p className="font-medium">Daily Rate</p>
-                        <p className="text-xl font-bold text-green-600">
-                          {formatCurrency(dailyRate)}
-                        </p>
+                        <h3 className="font-bold text-lg">{workerUser?.name || 'Unknown'}</h3>
+                        <p className="text-muted-foreground">@{workerUser?.username || 'worker'}</p>
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Description */}
-              <div className="pt-4 border-t">
-                <p className="font-medium mb-2">About</p>
-                <p className="text-muted-foreground leading-relaxed bg-slate-50 p-3 rounded">
-                  {workerDescription}
-                </p>
-              </div>
-
-              {/* Skills */}
-              {workerSkills.length > 0 && (
-                <div className="pt-4 border-t">
-                  <p className="font-medium mb-2">Skills & Expertise</p>
-                  <div className="flex flex-wrap gap-2">
-                    {workerSkills.map((skill: string, index: number) => (
-                      <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700">
-                        {skill}
+                      
+                      <Badge variant={profile?.is_available ? "default" : "secondary"}>
+                        {profile?.is_available ? 'Available' : 'Not Available'}
                       </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Portfolio Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                Portfolio
-                <Badge variant="secondary">{portfolio.length}</Badge>
-              </CardTitle>
-              <CardDescription>
-                {hasPortfolio ? 'Previous work and projects' : 'No portfolio items available yet'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {hasPortfolio ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {portfolio.map((item) => (
-                    <Card key={item.id} className="overflow-hidden group hover:shadow-lg transition-shadow">
-                      {item.image_url && (
-                        <div className="aspect-video overflow-hidden">
-                          <img
-                            src={item.image_url}
-                            alt={item.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
+                      {workerUser?.trust_score && (
+                        <div className="flex items-center gap-2">
+                          <Award className="h-4 w-4 text-emerald-600" />
+                          <span className="font-semibold">Trust: {workerUser.trust_score}%</span>
                         </div>
                       )}
-                      <CardContent className="p-4">
-                        <h4 className="font-semibold mb-2 line-clamp-1">{item.title}</h4>
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {item.description}
-                        </p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(item.project_date)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p>No portfolio items available</p>
-                  <p className="text-sm mt-1">This worker hasn't added any portfolio items yet.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Information Notice for Limited Data */}
-          {!hasProfileData && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-blue-700 text-sm">💡</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-blue-800">Next Steps</p>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Contact this worker directly to discuss their full qualifications, 
-                      view more portfolio items, and verify their experience for your project.
+                      {workerUser?.verified && (
+                        <div className="flex items-center gap-2 text-green-600">
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="text-sm">Verified</span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Contact & Rates */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Rates & Location</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm">Hourly Rate:</span>
+                        <span className="font-semibold">{formatCurrency(profile?.hourly_rate || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Daily Rate:</span>
+                        <span className="font-semibold">{formatCurrency(profile?.daily_rate || 0)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                        <MapPin className="h-4 w-4" />
+                        <span>Location</span>
+                      </div>
+                      <p className="font-medium">
+                        {profile?.location_city}, {profile?.location_state}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column - Detailed Info */}
+              <div className="lg:col-span-2 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Professional Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2">Category & Experience</h4>
+                      <div className="flex items-center gap-4">
+                        <Badge variant="secondary" className="capitalize">
+                          {profile?.category || 'General'}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-blue-600" />
+                          <span>{profile?.experience_years || 0} years experience</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span>{profile?.completed_jobs || 0} jobs completed</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-2">About</h4>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {profile?.description || 'No description provided.'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-yellow-600">
+                          {profile?.rating?.toFixed(1) || '0.0'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Average Rating</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-600">
+                          {reviews?.length || 0}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Total Reviews</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={() => onAssign(workerId)}
+                        className="flex-1 gap-2"
+                        size="lg"
+                      >
+                        <Users className="h-4 w-4" />
+                        Assign to Job
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="gap-2"
+                        onClick={handleStartChat}
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Send Message
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-3">
+                      Assigning this worker will create a contract and escrow for the job.
                     </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Portfolio Tab */}
+          <TabsContent value="portfolio">
+            <Card>
+              <CardHeader>
+                <CardTitle>Portfolio</CardTitle>
+                <CardDescription>
+                  Previous work and projects
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {portfolio && portfolio.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {portfolio.map((item) => (
+                      <Card key={item.id} className="overflow-hidden">
+                        {item.image_url && (
+                          <img 
+                            src={item.image_url} 
+                            alt={item.title}
+                            className="w-full h-48 object-cover"
+                          />
+                        )}
+                        <CardContent className="p-4">
+                          <h3 className="font-semibold mb-2">{item.title}</h3>
+                          <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                            {item.description}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(item.project_date).toLocaleDateString()}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No portfolio items yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          </TabsContent>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 justify-end pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
-            {onAssign && jobId && (
-              <Button onClick={() => onAssign(workerId)}>
-                <User className="h-4 w-4 mr-2" />
-                Assign to Job
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+          {/* Reviews Tab */}
+          <TabsContent value="reviews">
+            <Card>
+              <CardHeader>
+                <CardTitle>Reviews & Ratings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {reviews && reviews.length > 0 ? (
+                  <ScrollArea className="h-96">
+                    <div className="space-y-4">
+                      {reviews.map((review) => (
+                        <Card key={review.id}>
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h4 className="font-semibold">{review.reviewer?.name || 'Anonymous'}</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(review.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                                <span className="font-semibold">{review.rating}.0</span>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {review.comment}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No reviews yet</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 };
