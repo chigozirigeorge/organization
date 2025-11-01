@@ -12,25 +12,53 @@ import { Switch } from './ui/switch';
 import { Alert, AlertDescription } from './ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { NIGERIAN_STATES, getLGAsForState } from '@/lib/states';
 
 // Use the EXACT categories from the backend error message
 const CATEGORIES = [
   'Painter',
-  'Plumber', 
+  'Plumber',
   'Electrician',
   'Carpenter',
   'Mason',
   'Tiler',
   'Roofer',
+  'Welder',
+  'SteelBender',
+  'ConcreteWorker',
+  'Bricklayer',
+  'FlooringSpecialist',
+  'Glazier',
   'InteriorDecorator',
+  'FurnitureMaker',
+  'Upholsterer',
+  'CurtainBlindInstaller',
+  'WallpaperSpecialist',
   'Landscaper',
+  'Gardener',
+  'FenceInstaller',
+  'SwimmingPoolTechnician',
+  'OutdoorLightingSpecialist',
+  'RealEstateAgent',
+  'PropertyManager',
+  'FacilityManager',
+  'BuildingInspector',
+  'QuantitySurveyor',
+  'Architect',
+  'CivilEngineer',
+  'StructuralEngineer',
   'Cleaner',
-  'SecurityGuard',
+  'Handyman',
+  'HVACTechnician',
+  'ElevatorTechnician',
+  'SecuritySystemInstaller',
+  'PestControlSpecialist',
+  'DemolitionExpert',
+  'SiteSupervisor',
+  'ConstructionLaborer',
+  'SafetyOfficer',
+  'FireSafetyOfficer',
   'Other'
-];
-
-const STATES = [
-  'Lagos', 'Abuja', 'Rivers', 'Kano', 'Delta', 'Oyo', 'Kaduna', 'Edo', 'Ogun', 'Enugu'
 ];
 
 export const CreateJob = () => {
@@ -242,7 +270,7 @@ export const CreateJob = () => {
                       <SelectValue placeholder="Select state" />
                     </SelectTrigger>
                     <SelectContent>
-                      {STATES.map((state) => (
+                      {NIGERIAN_STATES.map((state) => (
                         <SelectItem key={state} value={state}>
                           {state}
                         </SelectItem>

@@ -1,4 +1,4 @@
-// ChatSystem.tsx - COMPLETE FIXED VERSION
+// ChatSystem.tsx - ENHANCED VERSION WITH CONTRACT CREATION
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -7,8 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
-import { MessageSquare, Send, Users, Search, Plus, User } from 'lucide-react';
+import { MessageSquare, Send, Users, Search, Plus, User, FileText, MapPin, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
+import { Textarea } from './ui/textarea';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { NIGERIAN_STATES, getLGAsForState } from '@/lib/states';
 
 interface Chat {
   id: string;
@@ -30,6 +34,14 @@ interface Chat {
   unread_count: number;
 }
 
+interface CreateContractData {
+  job_id?: string;
+  worker_id: string;
+  agreed_rate: number;
+  agreed_timeline: number;
+  terms: string;
+}
+
 interface Message {
   id: string;
   chat_id: string;
@@ -46,6 +58,65 @@ interface LocationState {
   workerUserId?: string;
 }
 
+interface JobFormData {
+  category: string;
+  title: string;
+  description: string;
+  location_state: string;
+  location_city: string;
+  location_address: string;
+  budget: string;
+  estimated_duration_days: string;
+  partial_payment_allowed: boolean;
+  partial_payment_percentage: string,
+}
+
+const WORKER_CATEGORIES = [
+  'Painter',
+  'Plumber',
+  'Electrician',
+  'Carpenter',
+  'Mason',
+  'Tiler',
+  'Roofer',
+  'Welder',
+  'SteelBender',
+  'ConcreteWorker',
+  'Bricklayer',
+  'FlooringSpecialist',
+  'Glazier',
+  'InteriorDecorator',
+  'FurnitureMaker',
+  'Upholsterer',
+  'CurtainBlindInstaller',
+  'WallpaperSpecialist',
+  'Landscaper',
+  'Gardener',
+  'FenceInstaller',
+  'SwimmingPoolTechnician',
+  'OutdoorLightingSpecialist',
+  'RealEstateAgent',
+  'PropertyManager',
+  'FacilityManager',
+  'BuildingInspector',
+  'QuantitySurveyor',
+  'Architect',
+  'CivilEngineer',
+  'StructuralEngineer',
+  'Cleaner',
+  'Handyman',
+  'HVACTechnician',
+  'ElevatorTechnician',
+  'SecuritySystemInstaller',
+  'PestControlSpecialist',
+  'DemolitionExpert',
+  'SiteSupervisor',
+  'ConstructionLaborer',
+  'SafetyOfficer',
+  'FireSafetyOfficer',
+  'Other'
+];
+
 export const ChatSystem = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -57,8 +128,32 @@ export const ChatSystem = () => {
   const [loading, setLoading] = useState(true);
   const [showWorkerList, setShowWorkerList] = useState(false);
   const [availableWorkers, setAvailableWorkers] = useState<any[]>([]);
+  const [filterState, setFilterState] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
   const locationState = location.state as LocationState;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showContractForm, setShowContractForm] = useState(false);
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [creatingContract, setCreatingContract] = useState(false);
+
+  const [jobFormData, setJobFormData] = useState<JobFormData>({
+    category: '',
+    title: '',
+    description: '',
+    location_state: '',
+    location_city: '',
+    location_address: '',
+    budget: '',
+    estimated_duration_days: '7',
+    partial_payment_allowed: false,
+    partial_payment_percentage: '40',
+  });
+
+  const [contractFormData, setContractFormData] = useState({
+    agreed_rate: '',
+    agreed_timeline: '',
+    terms: ''
+  });
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -70,32 +165,28 @@ export const ChatSystem = () => {
   }, [messages]);
 
   useEffect(() => {
-    
     // If user is employer, fetch available workers for chat initiation
     if (user?.role === 'employer') {
       fetchAvailableWorkers();
     }
-  }, [user]);
+  }, [user, filterState, filterCategory]);
 
   // Fetch chats on mount and when locationState changes
   useEffect(() => {
     if (user) {
-      fetchChats(true); // Show loading on initial fetch
+      fetchChats(true);
     }
   }, [user, locationState?.autoSelectChatId]);
 
   useEffect(() => {
-    // Handle auto-selection from navigation - FIXED VERSION
+    // Handle auto-selection from navigation
     if (locationState?.autoSelectChatId) {
       const chatId = locationState.autoSelectChatId;
       const targetChat = chats.find(chat => chat.id === chatId);
       
       if (targetChat) {
         setSelectedChat(targetChat);
-        // Clear the location state after successful selection
         navigate(location.pathname, { replace: true, state: {} });
-      } else {
-        // Chat might not be loaded yet, we'll handle it after fetchChats completes
       }
     }
   }, [chats, locationState, navigate, location.pathname]);
@@ -106,9 +197,8 @@ export const ChatSystem = () => {
       fetchMessages(chatId);
       const interval = setInterval(() => {
         fetchMessages(chatId);
-        // Refresh chat list less frequently to avoid re-renders
         fetchChats();
-      }, 3000);
+      }, 8000);
       
       return () => {
         clearInterval(interval);
@@ -118,7 +208,19 @@ export const ChatSystem = () => {
 
   const fetchAvailableWorkers = async () => {
     try {
-      const response = await fetch('https://verinest.up.railway.app/api/labour/workers/search?limit=50', {
+      let url = 'https://verinest.up.railway.app/api/labour/workers/search?limit=50';
+      
+      // Only add state filter if not "all"
+      if (filterState && filterState !== 'all') {
+        url += `&location_state=${encodeURIComponent(filterState)}`;
+      }
+      
+      // Only add category filter if not "all"
+      if (filterCategory && filterCategory !== 'all') {
+        url += `&category=${encodeURIComponent(filterCategory)}`;
+      }
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -146,9 +248,7 @@ export const ChatSystem = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Handle both data.data and data.message response formats
         const rawChats = data.data || data.message || [];
-        // Normalize the chat structure - backend returns nested chat object
         const fetchedChats = rawChats.map((item: any) => ({
           id: item.chat?.id || item.id,
           participant_one_id: item.chat?.participant_one_id || item.participant_one_id,
@@ -161,7 +261,6 @@ export const ChatSystem = () => {
         }));
         setChats(fetchedChats);
 
-        // AFTER fetching chats, check if we need to auto-select
         if (locationState?.autoSelectChatId && !selectedChat) {
           const targetChat = fetchedChats.find((chat: Chat) => chat.id === locationState.autoSelectChatId);
           if (targetChat) {
@@ -171,7 +270,7 @@ export const ChatSystem = () => {
         }
       }
     } catch (error) {
-      console.error('❌ [fetchChats] Failed to fetch chats:', error);
+      console.error('Failed to fetch chats:', error);
       if (showLoading) {
         toast.error('Failed to load chats');
       }
@@ -184,7 +283,6 @@ export const ChatSystem = () => {
 
   const createChatWithWorker = async (workerUserId: string) => {
     try {
-      
       const response = await fetch('https://verinest.up.railway.app/api/chat/chats', {
         method: 'POST',
         headers: {
@@ -201,7 +299,6 @@ export const ChatSystem = () => {
         
         if (data.data) {
           const chatData = data.data;
-          // Normalize the chat structure - backend returns nested chat object
           const newChat = {
             id: chatData.chat?.id || chatData.id,
             participant_one_id: chatData.chat?.participant_one_id || chatData.participant_one_id,
@@ -217,23 +314,20 @@ export const ChatSystem = () => {
           setShowWorkerList(false);
           toast.success(`Chat started with ${newChat.other_user?.name || 'worker'}`);
         } else {
-          console.error('❌ [createChatWithWorker] Invalid response structure:', data);
           toast.error('Failed to create chat: Invalid response');
         }
       } else {
         const errorData = await response.json();
-        console.error('❌ [createChatWithWorker] API error:', errorData);
         toast.error(errorData.message || 'Failed to start chat');
       }
     } catch (error) {
-      console.error('❌ [createChatWithWorker] Network error:', error);
+      console.error('Network error:', error);
       toast.error('Failed to start chat. Please try again.');
     }
   };
 
   const fetchMessages = async (chatId: string) => {
     if (!chatId || chatId === 'undefined') {
-      console.error('❌ [fetchMessages] Invalid chat ID:', chatId);
       return;
     }
 
@@ -251,11 +345,9 @@ export const ChatSystem = () => {
         if (data.data && data.data.length > 0) {
           markMessagesAsRead(chatId);
         }
-      } else {
-        console.error('❌ [fetchMessages] Failed to fetch messages:', response.status);
       }
     } catch (error) {
-      console.error('❌ [fetchMessages] Error:', error);
+      console.error('Error fetching messages:', error);
     }
   };
 
@@ -275,11 +367,6 @@ export const ChatSystem = () => {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !selectedChat.id) {
-      console.error('❌ [sendMessage] Cannot send - missing:', {
-        hasMessage: !!newMessage.trim(),
-        hasSelectedChat: !!selectedChat,
-        hasChatId: selectedChat?.id
-      });
       return;
     }
 
@@ -301,19 +388,15 @@ export const ChatSystem = () => {
         fetchChats();
       } else {
         const errorText = await response.text();
-        console.error('❌ [sendMessage] Failed to send message:', response.status, errorText);
         let errorMessage = 'Failed to send message';
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-          // Not JSON, use the text as is
-          errorMessage = errorText;
-        }
+        } catch (e) {}
         toast.error(errorMessage);
       }
     } catch (error) {
-      console.error('❌ [sendMessage] Network error:', error);
+      console.error('Network error:', error);
       toast.error('Failed to send message');
     }
   };
@@ -343,6 +426,906 @@ export const ChatSystem = () => {
       });
     }
   };
+
+//   // In ChatSystem.tsx - Enhanced handleCreateJobAndContract function
+
+// const handleCreateJobAndContract = async () => {
+//   if (!selectedChat) return;
+
+//   setCreatingContract(true);
+//   try {
+//     let jobId;
+//     let existingJob = null;
+
+//     // Step 1: Fetch user's existing jobs first
+//     try {
+//       console.log('🔍 Fetching existing jobs for user...');
+//       const jobsResponse = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
+//         headers: {
+//           'Authorization': `Bearer ${token}`,
+//         },
+//       });
+
+//       if (jobsResponse.ok) {
+//         const dashboardData = await jobsResponse.json();
+//         const existingJobs = dashboardData.data?.posted_jobs || [];
+        
+//         console.log('📋 Found existing jobs:', existingJobs.length);
+        
+//         // Look for a job with similar title that's still open
+//         existingJob = existingJobs.find((job: any) => 
+//           job.title?.includes(selectedChat.other_user.name) && 
+//           job.status === 'Open'
+//         );
+
+//         if (existingJob) {
+//           jobId = existingJob.id;
+//           console.log('✅ Found existing job to use:', jobId, existingJob.title);
+//         } else {
+//           console.log('📝 No suitable existing job found, will create new one');
+//         }
+//       }
+//     } catch (error) {
+//       console.log('❌ Could not fetch existing jobs, will create new one:', error);
+//     }
+
+//     // Step 2: Create new job only if no suitable existing job found
+//     if (!jobId) {
+//       console.log('🚀 Creating new job...');
+//       const jobResponse = await fetch('https://verinest.up.railway.app/api/labour/jobs', {
+//         method: 'POST',
+//         headers: {
+//           'Authorization': `Bearer ${token}`,
+//           'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify({
+//           category: jobFormData.category || 'Other',
+//           title: jobFormData.title || `Work with ${selectedChat.other_user.name}`,
+//           description: jobFormData.description || `Direct work agreement with ${selectedChat.other_user.name} through chat.`,
+//           location_state: jobFormData.location_state || 'Lagos',
+//           location_city: jobFormData.location_city || 'Lagos', 
+//           location_address: jobFormData.location_address || 'To be determined',
+//           budget: parseFloat(contractFormData.agreed_rate) || parseFloat(jobFormData.budget) || 1000,
+//           estimated_duration_days: parseInt(contractFormData.agreed_timeline) || parseInt(jobFormData.estimated_duration_days) || 7,
+//           partial_payment_allowed: false
+//         }),
+//       });
+
+//       // Handle job creation response - the job might be created even with notification errors
+//       const responseText = await jobResponse.text();
+//       console.log('📨 Job creation response:', responseText);
+
+//       if (jobResponse.ok) {
+//         try {
+//           const jobData = JSON.parse(responseText);
+//           jobId = jobData.data?.id;
+//           console.log('✅ New job created successfully:', jobId);
+//         } catch (parseError) {
+//           console.error('❌ Failed to parse job creation response:', parseError);
+//           // Even if parsing fails, try to extract job ID from response text
+//           const match = responseText.match(/"id":"([^"]+)"/);
+//           if (match) {
+//             jobId = match[1];
+//             console.log('🔄 Extracted job ID from response text:', jobId);
+//           }
+//         }
+//       } else {
+//         // Job creation failed, but check if it's just the notification error
+//         if (responseText.includes('notifications') && responseText.includes('title')) {
+//           console.log('⚠️ Job creation had notification error, but job might be created');
+//           // Try to extract job ID anyway
+//           const match = responseText.match(/"id":"([^"]+)"/);
+//           if (match) {
+//             jobId = match[1];
+//             console.log('🔄 Extracted job ID despite notification error:', jobId);
+//           } else {
+//             throw new Error('Job creation failed with notification error and no job ID found');
+//           }
+//         } else {
+//           throw new Error(`Job creation failed: ${responseText}`);
+//         }
+//       }
+
+//       if (!jobId) {
+//         throw new Error('Job ID not found after creation attempt');
+//       }
+//     }
+
+//     // Step 3: Get worker profile ID
+//     let workerProfileId;
+//     try {
+//       console.log('👤 Fetching worker profile...');
+//       const workerProfileResponse = await fetch(`https://verinest.up.railway.app/api/labour/workers/${selectedChat.other_user.id}`, {
+//         headers: {
+//           'Authorization': `Bearer ${token}`,
+//         },
+//       });
+
+//       if (workerProfileResponse.ok) {
+//         const workerProfileData = await workerProfileResponse.json();
+//         workerProfileId = workerProfileData.data?.profile?.id;
+//         console.log('✅ Worker profile ID:', workerProfileId);
+//       } else {
+//         console.log('⚠️ Could not fetch worker profile, using user ID as fallback');
+//         workerProfileId = selectedChat.other_user.id;
+//       }
+//     } catch (error) {
+//       console.log('⚠️ Error fetching worker profile, using user ID:', error);
+//       workerProfileId = selectedChat.other_user.id;
+//     }
+
+//     if (!workerProfileId) {
+//       workerProfileId = selectedChat.other_user.id;
+//     }
+
+//     console.log('🔍 Final worker ID to use:', workerProfileId);
+
+//     // Step 4: Try to assign worker to job
+//     console.log('🤝 Assigning worker to job...');
+//     const assignResponse = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/assign`, {
+//       method: 'PUT',
+//       headers: {
+//         'Authorization': `Bearer ${token}`,
+//         'Content-Type': 'application/json',
+//       },
+//       body: JSON.stringify({
+//         worker_id: workerProfileId,
+//       }),
+//     });
+
+//     if (assignResponse.ok) {
+//       const assignData = await assignResponse.json();
+//       console.log('✅ Worker assigned successfully:', assignData);
+//       toast.success('Contract created successfully! Worker assigned to job.');
+      
+//       // Success - reset and navigate
+//       setShowJobForm(false);
+//       setShowContractForm(false);
+//       setJobFormData({
+//         category: '',
+//         title: '',
+//         description: '',
+//         location_state: '',
+//         location_city: '',
+//         location_address: '',
+//         budget: '',
+//         estimated_duration_days: '7',
+//         partial_payment_allowed: false,
+//         partial_payment_percentage: '40'
+//       });
+//       setContractFormData({
+//         agreed_rate: '',
+//         agreed_timeline: '',
+//         terms: ''
+//       });
+      
+//       navigate('/dashboard/contracts');
+//       return;
+//     } else {
+//       const errorText = await assignResponse.text();
+//       console.error('❌ Worker assignment failed:', errorText);
+      
+//       let errorMessage = 'Failed to assign worker to job';
+//       try {
+//         const errorData = JSON.parse(errorText);
+//         errorMessage = errorData.message || errorMessage;
+//       } catch (e) {
+//         errorMessage = errorText;
+//       }
+      
+//       // If assignment fails because worker hasn't applied
+//       if (errorMessage.includes('has not applied') || errorMessage.includes('not applied')) {
+//         throw new Error('Worker needs to apply to the job first. Please ask the worker to apply through the job listing.');
+//       }
+      
+//       throw new Error(errorMessage);
+//     }
+
+//   } catch (error: any) {
+//     console.error('❌ Failed to create job and assign worker:', error);
+    
+//     // More specific error handling
+//     if (error.message.includes('Worker needs to apply')) {
+//       toast.error('Worker Application Required: Please ask the worker to apply to the job first, then you can assign them.');
+//     } else if (error.message.includes('notifications') || error.message.includes('notification')) {
+//       toast.warning('Job was created but there was a notification issue. The contract might still be created. Please check your contracts list.');
+//       navigate('/dashboard/contracts');
+//     } else if (error.message.includes('validation') || error.message.includes('Validation')) {
+//       toast.error('Validation Error: Please check all job details are correct.');
+//     } else {
+//       toast.error(error.message || 'Failed to create job and assign worker');
+//     }
+//   } finally {
+//     setCreatingContract(false);
+//   }
+// };
+
+// // Add this function to pre-fill from existing jobs
+// const handleSelectExistingJob = async () => {
+//   if (!selectedChat) return;
+
+//   try {
+//     console.log('🔍 Fetching existing jobs for selection...');
+//     const jobsResponse = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
+//       headers: {
+//         'Authorization': `Bearer ${token}`,
+//       },
+//     });
+
+//     if (jobsResponse.ok) {
+//       const dashboardData = await jobsResponse.json();
+//       const existingJobs = dashboardData.data?.posted_jobs || [];
+      
+//       if (existingJobs.length > 0) {
+//         // For now, auto-select the first open job that matches the worker's category
+//         const suitableJob = existingJobs.find((job: any) => 
+//           job.status === 'Open'
+//         );
+
+//         if (suitableJob) {
+//           // Pre-fill the job form with existing job data
+//           setJobFormData({
+//             category: suitableJob.category || '',
+//             title: suitableJob.title || `Work with ${selectedChat.other_user.name}`,
+//             description: suitableJob.description || '',
+//             location_state: suitableJob.location_state || '',
+//             location_city: suitableJob.location_city || '',
+//             location_address: suitableJob.location_address || '',
+//             budget: suitableJob.budget?.toString() || contractFormData.agreed_rate || '',
+//             estimated_duration_days: suitableJob.estimated_duration_days?.toString() || '7',
+//             partial_payment_allowed: suitableJob.partial_payment_allowed || false,
+//             partial_payment_percentage: suitableJob.partial_payment_percentage?.toString() || '40'
+//           });
+          
+//           console.log('✅ Pre-filled with existing job:', suitableJob.title);
+//           setShowJobForm(true);
+//         } else {
+//           // No suitable existing jobs, create new one
+//           handleOpenContractFlow();
+//         }
+//       } else {
+//         // No existing jobs, create new one
+//         handleOpenContractFlow();
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Error fetching existing jobs:', error);
+//     // Fallback to creating new job
+//     handleOpenContractFlow();
+//   }
+// };
+
+// Add this function to pre-fill from existing jobs
+const handleSelectExistingJob = async () => {
+  if (!selectedChat) return;
+
+  try {
+    console.log('🔍 Fetching existing jobs for selection...');
+    const jobsResponse = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (jobsResponse.ok) {
+      const dashboardData = await jobsResponse.json();
+      const existingJobs = dashboardData.data?.posted_jobs || [];
+      
+      if (existingJobs.length > 0) {
+        // For now, auto-select the first open job that matches the worker's category
+        const suitableJob = existingJobs.find((job: any) => 
+          job.status === 'Open'
+        );
+
+        if (suitableJob) {
+          // Pre-fill the job form with existing job data
+          setJobFormData({
+            category: suitableJob.category || '',
+            title: suitableJob.title || `Work with ${selectedChat.other_user.name}`,
+            description: suitableJob.description || '',
+            location_state: suitableJob.location_state || '',
+            location_city: suitableJob.location_city || '',
+            location_address: suitableJob.location_address || '',
+            budget: suitableJob.budget?.toString() || contractFormData.agreed_rate || '',
+            estimated_duration_days: suitableJob.estimated_duration_days?.toString() || '7',
+            partial_payment_allowed: suitableJob.partial_payment_allowed || false,
+            partial_payment_percentage: suitableJob.partial_payment_percentage?.toString() || '40'
+          });
+          
+          console.log('✅ Pre-filled with existing job:', suitableJob.title);
+          setShowJobForm(true);
+        } else {
+          // No suitable existing jobs, create new one
+          handleOpenContractFlow();
+        }
+      } else {
+        // No existing jobs, create new one
+        handleOpenContractFlow();
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching existing jobs:', error);
+    // Fallback to creating new job
+    handleOpenContractFlow();
+  }
+};
+
+
+// Update the handleOpenContractFlow to use existing jobs
+const handleOpenContractFlow = () => {
+  if (!selectedChat) return;
+  
+  // First try to use existing jobs, fallback to creating new one
+  handleSelectExistingJob();
+};
+
+// In ChatSystem.tsx - Fixed handleCreateJobAndContract function
+
+// In ChatSystem.tsx - Fixed handleCreateJobAndContract function
+
+const handleCreateJobAndContract = async () => {
+  if (!selectedChat) return;
+
+  setCreatingContract(true);
+  try {
+    let jobId;
+    let existingJob = null;
+
+    // Step 1: Fetch existing jobs or create new one
+    try {
+      console.log('🔍 Fetching existing jobs for user...');
+      const jobsResponse = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (jobsResponse.ok) {
+        const dashboardData = await jobsResponse.json();
+        const existingJobs = dashboardData.data?.posted_jobs || [];
+        
+        console.log('📋 Found existing jobs:', existingJobs.length);
+        
+        // Look for a job with similar title that's still open
+        existingJob = existingJobs.find((job: any) => 
+          job.title?.includes(selectedChat.other_user.name) && 
+          job.status === 'Open'
+        );
+
+        if (existingJob) {
+          jobId = existingJob.id;
+          console.log('✅ Found existing job to use:', jobId, existingJob.title);
+        } else {
+          console.log('📝 No suitable existing job found, will create new one');
+        }
+      }
+    } catch (error) {
+      console.log('❌ Could not fetch existing jobs, will create new one:', error);
+    }
+
+    // Step 2: Create new job only if no suitable existing job found
+    if (!jobId) {
+      console.log('🚀 Creating new job...');
+      const jobResponse = await fetch('https://verinest.up.railway.app/api/labour/jobs', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: jobFormData.category || 'Other',
+          title: jobFormData.title || `Work with ${selectedChat.other_user.name}`,
+          description: jobFormData.description || `Direct work agreement with ${selectedChat.other_user.name} through chat.`,
+          location_state: jobFormData.location_state || 'Lagos',
+          location_city: jobFormData.location_city || 'Lagos', 
+          location_address: jobFormData.location_address || 'To be determined',
+          budget: parseFloat(contractFormData.agreed_rate) || parseFloat(jobFormData.budget) || 1000,
+          estimated_duration_days: parseInt(contractFormData.agreed_timeline) || parseInt(jobFormData.estimated_duration_days) || 7,
+          partial_payment_allowed: false
+        }),
+      });
+
+      // Handle job creation response
+      const responseText = await jobResponse.text();
+      console.log('📨 Job creation response:', responseText);
+
+      if (jobResponse.ok) {
+        try {
+          const jobData = JSON.parse(responseText);
+          jobId = jobData.data?.id;
+          console.log('✅ New job created successfully:', jobId);
+        } catch (parseError) {
+          console.error('❌ Failed to parse job creation response:', parseError);
+          const match = responseText.match(/"id":"([^"]+)"/);
+          if (match) {
+            jobId = match[1];
+            console.log('🔄 Extracted job ID from response text:', jobId);
+          }
+        }
+      } else {
+        if (responseText.includes('notifications') && responseText.includes('title')) {
+          console.log('⚠️ Job creation had notification error, but job might be created');
+          const match = responseText.match(/"id":"([^"]+)"/);
+          if (match) {
+            jobId = match[1];
+            console.log('🔄 Extracted job ID despite notification error:', jobId);
+          } else {
+            throw new Error('Job creation failed with notification error and no job ID found');
+          }
+        } else {
+          throw new Error(`Job creation failed: ${responseText}`);
+        }
+      }
+
+      if (!jobId) {
+        throw new Error('Job ID not found after creation attempt');
+      }
+    }
+
+    // Step 3: Check if worker has already applied to this job
+    console.log('🔍 Checking if worker has applied to job...');
+    let workerHasApplied = false;
+    let workerApplication = null;
+    
+    try {
+      const applicationsResponse = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (applicationsResponse.ok) {
+        const applicationsData = await applicationsResponse.json();
+        workerApplication = applicationsData.data?.find((app: any) => 
+          app.worker_user_id === selectedChat.other_user.id
+        );
+
+        if (workerApplication) {
+          workerHasApplied = true;
+          console.log('✅ Worker has applied to this job:', workerApplication);
+        } else {
+          console.log('❌ Worker has NOT applied to this job yet');
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Error checking applications:', error);
+    }
+
+    // Step 4: If worker hasn't applied, send them the job link
+    if (!workerHasApplied) {
+      console.log('💬 Sending job link to worker...');
+      const jobLink = `${window.location.origin}/dashboard/jobs/${jobId}`;
+      
+      const messageToWorker = `Hi! I'd like to work with you. Please apply to this job so we can start our contract: ${jobLink}\n\nOnce you apply, I'll be able to assign you immediately and we can begin the work.`;
+      
+      try {
+        await fetch(`https://verinest.up.railway.app/api/chat/chats/${selectedChat.id}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            content: messageToWorker,
+          }),
+        });
+        console.log('✅ Message sent to worker with job link');
+      } catch (messageError) {
+        console.error('❌ Failed to send message to worker:', messageError);
+      }
+
+      toast.success(
+        <div className="space-y-2">
+          <p className="font-semibold">Job Ready!</p>
+          <p>I've sent the job link to the worker. They need to apply first.</p>
+          <p className="text-sm">Once they apply, come back here to create the contract.</p>
+          <Button 
+            size="sm" 
+            onClick={() => navigate(`/dashboard/jobs/${jobId}`)}
+            className="mt-2"
+          >
+            View Job & Applications
+          </Button>
+        </div>,
+        { duration: 8000 }
+      );
+
+      setShowJobForm(false);
+      setShowContractForm(false);
+      resetForms();
+      return;
+    }
+
+    // Step 5: Worker HAS applied - now assign them using their USER ID (not profile ID)
+    console.log('🤝 Worker has applied - attempting assignment...');
+    
+    // Use the worker's USER ID (from the chat), not their profile ID
+    const workerUserId = selectedChat.other_user.id;
+    console.log('🔍 Using worker USER ID for assignment:', workerUserId);
+
+    const assignResponse = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/assign`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        worker_id: workerApplication.worker_id, // Use USER ID, not profile ID
+      }),
+    });
+
+    if (assignResponse.ok) {
+      const assignData = await assignResponse.json();
+      console.log('✅ Worker assigned successfully:', assignData);
+      toast.success('Contract created successfully! Worker assigned to job.');
+      
+      // Success - reset and navigate
+      setShowJobForm(false);
+      setShowContractForm(false);
+      resetForms();
+      navigate('/dashboard/contracts');
+      return;
+    } else {
+      const errorText = await assignResponse.text();
+      console.error('❌ Assignment failed:', errorText);
+      
+      let errorMessage = 'Failed to assign worker to job';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorMessage;
+      } catch (e) {
+        errorMessage = errorText;
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+  } catch (error: any) {
+    console.error('❌ Failed in contract creation process:', error);
+    
+    if (error.message.includes('foreign key constraint') || error.message.includes('assigned_worker_id_fkey')) {
+      toast.error('Assignment Error: There seems to be a database issue. Please try assigning the worker through the job applications page directly.');
+      navigate('/dashboard/my-jobs');
+    } else if (error.message.includes('notifications') || error.message.includes('notification')) {
+      toast.warning('Job was created but there was a notification issue. Please check your jobs list.');
+    } else {
+      toast.error(error.message || 'Failed to create contract');
+    }
+  } finally {
+    setCreatingContract(false);
+  }
+};
+
+// Helper function to reset forms
+const resetForms = () => {
+  setJobFormData({
+    category: '',
+    title: '',
+    description: '',
+    location_state: '',
+    location_city: '',
+    location_address: '',
+    budget: '',
+    estimated_duration_days: '7',
+    partial_payment_allowed: false,
+    partial_payment_percentage: '40'
+  });
+  setContractFormData({
+    agreed_rate: '',
+    agreed_timeline: '',
+    terms: ''
+  });
+};
+
+// Add this function to check for applications periodically
+const startApplicationMonitoring = (jobId: string, workerId: string) => {
+  const monitorInterval = setInterval(async () => {
+    try {
+      const hasApplied = await checkIfWorkerApplied(jobId, workerId);
+      if (hasApplied) {
+        clearInterval(monitorInterval);
+        toast.success('Worker has applied! You can now assign them.');
+        // You could auto-assign here or just notify the employer
+      }
+    } catch (error) {
+      console.log('Monitoring error:', error);
+    }
+  }, 10000); // Check every 10 seconds
+
+  // Stop monitoring after 10 minutes
+  setTimeout(() => {
+    clearInterval(monitorInterval);
+  }, 600000);
+};
+
+const checkIfWorkerApplied = async (jobId: string, workerUserId: string) => {
+  try {
+    const applicationsResponse = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (applicationsResponse.ok) {
+      const applicationsData = await applicationsResponse.json();
+      const workerApplication = applicationsData.data?.find((app: any) => 
+        app.worker_user_id === workerUserId
+      );
+      return !!workerApplication;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking applications:', error);
+    return false;
+  }
+};
+
+  const updateJobFormField = (field: string, value: any) => {
+    setJobFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateContractField = (field: string, value: string) => {
+    setContractFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Auto-update terms template when rate or timeline changes
+      if (field === 'agreed_rate' || field === 'agreed_timeline') {
+        newData.terms = `This contract is between the Employer and ${selectedChat?.other_user.name} (@${selectedChat?.other_user.username}).
+
+      Scope of Work:
+      To be determined based on mutual agreement.
+
+      Payment Terms:
+      - Total agreed amount: ₦${newData.agreed_rate || '0.00'}
+      - Payment will be held in escrow and released upon job completion
+      - Work to be completed within ${newData.agreed_timeline || '0'} days
+
+      Responsibilities:
+      1. Worker agrees to complete the work as described
+      2. Employer agrees to provide necessary information and access
+      3. Both parties agree to communicate regularly about progress
+
+      Termination:
+      Either party may terminate this contract with 24 hours notice.
+
+      Both parties agree to these terms and conditions.`;
+      }
+      
+      return newData;
+    });
+  };
+
+  // Job Form Component
+  const renderJobForm = () => (
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Briefcase className="h-5 w-5" />
+          Create Job for Contract
+        </CardTitle>
+        <CardDescription>
+          First, create a job that will be associated with this contract
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="category">Work Category</Label>
+            <Select
+              value={jobFormData.category}
+              onValueChange={(value) => updateJobFormField('category', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKER_CATEGORIES.map(category => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="title">Job Title</Label>
+            <Input
+              id="title"
+              placeholder="e.g., Home Cleaning Service"
+              value={jobFormData.title}
+              onChange={(e) => updateJobFormField('title', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="description">Job Description</Label>
+          <Textarea
+            id="description"
+            placeholder="Describe the work to be done..."
+            value={jobFormData.description}
+            onChange={(e) => updateJobFormField('description', e.target.value)}
+            rows={4}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="location_state">State</Label>
+            <Select
+              value={jobFormData.location_state}
+              onValueChange={(value) => updateJobFormField('location_state', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent>
+                {NIGERIAN_STATES.map(state => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="location_city">LGA/City</Label>
+            <Select
+              value={jobFormData.location_city}
+              onValueChange={(value) => updateJobFormField('location_city', value)}
+              disabled={!jobFormData.location_state}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select LGA" />
+              </SelectTrigger>
+              <SelectContent>
+                {getLGAsForState(jobFormData.location_state).map(lga => (
+                  <SelectItem key={lga} value={lga}>
+                    {lga}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="location_address">Address</Label>
+            <Input
+              id="location_address"
+              placeholder="Street address"
+              value={jobFormData.location_address}
+              onChange={(e) => updateJobFormField('location_address', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="budget">Budget (₦)</Label>
+            <Input
+              id="budget"
+              type="number"
+              placeholder="0.00"
+              value={jobFormData.budget}
+              onChange={(e) => updateJobFormField('budget', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="estimated_duration_days">Timeline (Days)</Label>
+            <Input
+              id="estimated_duration_days"
+              type="number"
+              placeholder="7"
+              value={jobFormData.estimated_duration_days}
+              onChange={(e) => updateJobFormField('estimated_duration_days', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-4">
+          <Button 
+            onClick={() => setShowContractForm(true)}
+            disabled={!jobFormData.category || !jobFormData.title || !jobFormData.budget}
+            className="flex-1"
+          >
+            Continue to Contract
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setShowJobForm(false)}
+          >
+            Cancel
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // Contract Form Component
+  const renderContractForm = () => (
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Create Contract with {selectedChat?.other_user.name}
+        </CardTitle>
+        <CardDescription>
+          Finalize the contract terms and create the agreement
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="agreed_rate">Agreed Rate (₦)</Label>
+            <Input
+              id="agreed_rate"
+              type="number"
+              placeholder="0.00"
+              value={contractFormData.agreed_rate}
+              onChange={(e) => updateContractField('agreed_rate', e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="agreed_timeline">Timeline (Days)</Label>
+            <Input
+              id="agreed_timeline"
+              type="number"
+              placeholder="7"
+              value={contractFormData.agreed_timeline}
+              onChange={(e) => updateContractField('agreed_timeline', e.target.value)}
+            />
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="terms">Contract Terms</Label>
+          <Textarea
+            id="terms"
+            placeholder="Describe the work scope, payment terms, and other conditions..."
+            value={contractFormData.terms}
+            onChange={(e) => updateContractField('terms', e.target.value)}
+            rows={6}
+          />
+        </div>
+
+        <div className="bg-muted p-4 rounded-lg">
+          <h4 className="font-medium mb-2">Job Details</h4>
+          <div className="text-sm space-y-1">
+            <p><strong>Title:</strong> {jobFormData.title}</p>
+            <p><strong>Category:</strong> {jobFormData.category}</p>
+            <p><strong>Location:</strong> {jobFormData.location_city}, {jobFormData.location_state}</p>
+            <p><strong>Budget:</strong> ₦{parseFloat(jobFormData.budget || '0').toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button 
+            onClick={handleCreateJobAndContract}
+            disabled={creatingContract || !contractFormData.agreed_rate || !contractFormData.agreed_timeline}
+            className="flex-1"
+          >
+            {creatingContract ? (
+              <>Creating Contract...</>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 mr-2" />
+                Create Job & Contract
+              </>
+            )}
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setShowContractForm(false)}
+          >
+            Back
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   if (loading) {
     return (
@@ -458,9 +1441,11 @@ export const ChatSystem = () => {
         </Card>
       </div>
 
-      {/* Chat Messages OR Worker List */}
+      {/* Chat Messages OR Worker List OR Forms */}
       <div className="lg:col-span-2">
-        {showWorkerList ? (
+        {showJobForm ? (
+          showContractForm ? renderContractForm() : renderJobForm()
+        ) : showWorkerList ? (
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -468,8 +1453,45 @@ export const ChatSystem = () => {
                 Available Workers
               </CardTitle>
               <CardDescription>
-                Select a worker to start a conversation
+                Find and connect with skilled workers
               </CardDescription>
+              
+              {/* Filters - FIXED VERSION */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-state">Filter by State</Label>
+                  <Select value={filterState} onValueChange={setFilterState}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {NIGERIAN_STATES.map(state => (
+                        <SelectItem key={state} value={state}>
+                          {state}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filter-category">Filter by Category</Label>
+                  <Select value={filterCategory} onValueChange={setFilterCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {WORKER_CATEGORIES.map(category => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-96">
@@ -477,7 +1499,8 @@ export const ChatSystem = () => {
                   {availableWorkers.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No workers available</p>
+                      <p>No workers found</p>
+                      <p className="text-sm">Try adjusting your filters</p>
                     </div>
                   ) : (
                     availableWorkers.map((worker) => (
@@ -493,8 +1516,17 @@ export const ChatSystem = () => {
                           <div>
                             <h3 className="font-semibold">{worker.user?.name || 'Unknown Worker'}</h3>
                             <p className="text-sm text-muted-foreground capitalize">
-                              {worker.profile.category} • {worker.profile.location_city}
+                              {worker.profile.category} • {worker.profile.location_city}, {worker.profile.location_state}
                             </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                {worker.profile.location_state}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs">
+                                {worker.profile.experience_years} yrs exp
+                              </Badge>
+                            </div>
                           </div>
                         </div>
                         <Button variant="outline" size="sm">
@@ -516,7 +1548,7 @@ export const ChatSystem = () => {
               </div>
             </CardContent>
           </Card>
-        ) : selectedChat ? (
+        ) :  selectedChat ? (
           <Card className="h-full flex flex-col">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
@@ -531,54 +1563,65 @@ export const ChatSystem = () => {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant="outline">
-                  Online
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {/* Add contract button for employers */}
+                  {user?.role === 'employer' && (
+                    <Button 
+                      onClick={handleOpenContractFlow}
+                      className="gap-1"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Create Contract
+                    </Button>
+                  )}
+                  <Badge variant="outline">
+                    Online
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 p-0">
               <ScrollArea className="h-96 p-4">
-              <div className="space-y-4">
-                {messages.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No messages yet</p>
-                    <p className="text-sm">Start the conversation</p>
-                  </div>
-                ) : (
-                  // Sort messages by date to ensure proper order
-                  [...messages]
-                    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-                    .map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${
-                          message.sender_id === user?.id ? 'justify-end' : 'justify-start'
-                        }`}
-                      >
+                <div className="space-y-4">
+                  {messages.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No messages yet</p>
+                      <p className="text-sm">Start the conversation</p>
+                    </div>
+                  ) : (
+                    [...messages]
+                      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                      .map((message) => (
                         <div
-                          className={`max-w-xs lg:max-w-md p-3 rounded-2xl ${
-                            message.sender_id === user?.id
-                              ? 'bg-primary text-primary-foreground rounded-br-none'
-                              : 'bg-muted rounded-bl-none'
+                          key={message.id}
+                          className={`flex ${
+                            message.sender_id === user?.id ? 'justify-end' : 'justify-start'
                           }`}
                         >
-                          <p className="text-sm">{message.content}</p>
-                          <p
-                            className={`text-xs mt-1 ${
+                          <div
+                            className={`max-w-xs lg:max-w-md p-3 rounded-2xl ${
                               message.sender_id === user?.id
-                                ? 'text-primary-foreground/70'
-                                : 'text-muted-foreground'
+                                ? 'bg-primary text-primary-foreground rounded-br-none'
+                                : 'bg-muted rounded-bl-none'
                             }`}
                           >
-                            {formatMessageTime(message.created_at)}
-                          </p>
+                            <p className="text-sm">{message.content}</p>
+                            <p
+                              className={`text-xs mt-1 ${
+                                message.sender_id === user?.id
+                                  ? 'text-primary-foreground/70'
+                                  : 'text-muted-foreground'
+                              }`}
+                            >
+                              {formatMessageTime(message.created_at)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                      ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
               </ScrollArea>
               <div className="border-t p-4">
                 <div className="flex gap-2">

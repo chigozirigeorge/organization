@@ -1,49 +1,101 @@
-// components/ApplicationList.tsx
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { X, User, DollarSign, Calendar, Check, X as RejectIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { Job, JobApplication } from '../types/labour';
-import { useAuth } from '../contexts/AuthContext';
+
+interface Job {
+  id: string;
+  title: string;
+  employer_id: string;
+}
+
+interface JobApplication {
+  id: string;
+  worker_id: string;  // This is worker_profile.id
+  worker_user_id?: string;  // This is the actual user.id - USE THIS!
+  worker: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  proposed_rate: number;
+  estimated_completion: number;
+  cover_letter: string;
+  status: string;
+}
 
 interface ApplicationListProps {
   job: Job;
   applications: JobApplication[];
   onClose: () => void;
   onApplicationUpdate: () => void;
+  token: string;
 }
 
-export const ApplicationList = ({ job, applications, onClose, onApplicationUpdate }: ApplicationListProps) => {
-  const { token } = useAuth();
+export const ApplicationList = ({ 
+  job, 
+  applications, 
+  onClose, 
+  onApplicationUpdate,
+  token 
+}: ApplicationListProps) => {
 
-  const handleAcceptApplication = async (applicationId: string) => {
+  const handleAcceptApplication = async (application: JobApplication) => {
     try {
-      const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job.id}/assign`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          worker_id: applications.find(app => app.id === applicationId)?.worker.id,
-        }),
+      console.log('🎯 [ApplicationList] Accepting application:', {
+        applicationId: application.id,
+        workerProfileId: application.worker_id,
+        workerUserId: application.worker_user_id,
       });
 
+      // CRITICAL: Use worker_user_id if available, fallback to worker_id
+      // The backend's resolve_worker_identifiers will handle either
+      const workerIdToSend = application.worker_user_id || application.worker_id;
+
+      console.log('📤 [ApplicationList] Sending worker ID:', workerIdToSend);
+
+      const response = await fetch(
+        `https://verinest.up.railway.app/api/labour/jobs/${job.id}/assign`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            worker_id: workerIdToSend,
+          }),
+        }
+      );
+
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ [ApplicationList] Assignment successful:', result);
         toast.success('Worker assigned successfully!');
         onApplicationUpdate();
         onClose();
       } else {
-        throw new Error('Failed to assign worker');
+        const errorText = await response.text();
+        console.error('❌ [ApplicationList] Assignment failed:', errorText);
+        
+        let errorMessage = 'Failed to assign worker';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText;
+        }
+        
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
+      console.error('❌ [ApplicationList] Error:', error);
       toast.error(error.message || 'Failed to assign worker');
     }
   };
 
   const handleRejectApplication = async (applicationId: string) => {
-    // You might need to create this endpoint
     toast.info('Reject functionality to be implemented');
   };
 
@@ -80,10 +132,17 @@ export const ApplicationList = ({ job, applications, onClose, onApplicationUpdat
                       </div>
                       <div>
                         <p className="font-medium">
-                          {application.worker.user.name}
+                          {application.worker.name}
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          {application.worker.profile.experience_years} years experience
+                        <p className="text-xs text-muted-foreground">
+                          {application.worker.email}
+                        </p>
+                        {/* Debug info - remove in production */}
+                        <p className="text-xs text-blue-600">
+                          Profile ID: {application.worker_id.substring(0, 8)}...
+                          {application.worker_user_id && (
+                            <> | User ID: {application.worker_user_id.substring(0, 8)}...</>
+                          )}
                         </p>
                       </div>
                       <Badge variant={
@@ -117,7 +176,7 @@ export const ApplicationList = ({ job, applications, onClose, onApplicationUpdat
                     <div className="flex gap-2 ml-4">
                       <Button
                         size="sm"
-                        onClick={() => handleAcceptApplication(application.id)}
+                        onClick={() => handleAcceptApplication(application)}
                       >
                         <Check className="h-4 w-4 mr-1" />
                         Accept

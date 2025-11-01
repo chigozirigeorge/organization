@@ -1148,7 +1148,7 @@ const handlePinSetupComplete = () => {
                 <CardDescription>Manage your funds quickly</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
                   <Button 
                     variant="outline" 
                     className="h-20 flex flex-col"
@@ -1195,7 +1195,7 @@ const handlePinSetupComplete = () => {
                   <Button 
                     variant="outline" 
                     className="w-full mt-4"
-                    onClick={() => navigate('/transactions')} // or your preferred navigation
+                    onClick={() => navigate('/dashboard/wallet/transactions')} // or your preferred navigation
                   >
                     View All Transactions
                   </Button>
