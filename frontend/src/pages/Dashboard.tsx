@@ -678,7 +678,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
       {/* Fixed Navbar with proper props - REMOVED DUPLICATE MENU */}
-      <Navbar />
+      <Navbar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
       
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
@@ -812,14 +812,14 @@ const Dashboard = () => {
                   {user.role}
                 </Badge>
                 {/* Single menu button - removed duplicate */}
-                <Button
+                {/* <Button
                   variant="outline"
                   size="sm"
                   className="lg:hidden"
                   onClick={() => setSidebarOpen(true)}
                 >
                   <Menu className="h-4 w-4" />
-                </Button>
+                </Button> */}
               </div>
             </div>
           </div>
@@ -996,8 +996,8 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
-      
-      <Footer />
+{/*       
+      <Footer /> */}
     </div>
   );
 };

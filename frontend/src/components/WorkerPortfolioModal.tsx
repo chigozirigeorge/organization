@@ -1,4 +1,4 @@
-// components/WorkerPortfolioModal.tsx - Updated
+// components/WorkerPortfolioModal.tsx - FIXED VERSION
 import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { 
   MapPin, Star, Briefcase, Calendar, DollarSign, User, Award, 
-  CheckCircle, Clock, ExternalLink, X, Users, FileText, MessageCircle
+  CheckCircle, Clock, ExternalLink, X, Users, FileText, MessageCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { CompleteWorkerData } from '../utils/workerUtils';
@@ -24,6 +25,17 @@ interface WorkerPortfolioModalProps {
   jobId?: string;
 }
 
+interface PortfolioItem {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  project_date: string;
+  created_at?: string;
+  category?: string;
+  worker_id?: string;
+}
+
 export const WorkerPortfolioModal = ({
   workerId,
   workerData,
@@ -36,12 +48,112 @@ export const WorkerPortfolioModal = ({
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Add detailed debug logging
+  useEffect(() => {
+    if (workerData && isOpen) {
+      console.log('🔍 [WorkerPortfolioModal] FULL WORKER DATA:', workerData);
+      console.log('📊 [WorkerPortfolioModal] Portfolio data:', {
+        portfolio: workerData.portfolio,
+        portfolioType: typeof workerData.portfolio,
+        isArray: Array.isArray(workerData.portfolio),
+        length: workerData.portfolio?.length,
+        firstItem: workerData.portfolio?.[0]
+      });
+    }
+  }, [workerData, isOpen]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN',
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount || 0);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-NG', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  // Safe portfolio data extraction - FIXED VERSION
+  const getPortfolioItems = (): PortfolioItem[] => {
+    if (!workerData) return [];
+    
+    console.log('🔄 [getPortfolioItems] Processing worker data:', workerData);
+    
+    try {
+      // Handle different possible portfolio data structures
+      let portfolioData = workerData.portfolio;
+      
+      // If portfolio is nested in data property
+      if (portfolioData && typeof portfolioData === 'object' && 'data' in portfolioData) {
+        portfolioData = (portfolioData as any).data;
+      }
+      
+      if (Array.isArray(portfolioData)) {
+        const items = portfolioData.map((item, index) => {
+          console.log(`🎨 [Portfolio Item ${index}]:`, item);
+          return {
+            id: item.id || `portfolio-${index}-${Math.random()}`,
+            title: item.title || 'Untitled Project',
+            description: item.description || 'No description available.',
+            image_url: item.image_url || '',
+            project_date: item.project_date || item.created_at || new Date().toISOString(),
+            created_at: item.created_at,
+            category: item.category,
+            worker_id: item.worker_id
+          };
+        });
+        
+        console.log('✅ [getPortfolioItems] Processed portfolio items:', items);
+        return items;
+      }
+      
+      console.log('❌ [getPortfolioItems] Portfolio data is not an array:', portfolioData);
+      return [];
+    } catch (error) {
+      console.error('❌ [WorkerPortfolioModal] Error parsing portfolio data:', error);
+      return [];
+    }
+  };
+
+  const portfolioItems = getPortfolioItems();
+  const reviews = workerData?.reviews || [];
+  const profile = workerData?.profile || {};
+  const workerUser = workerData?.user || {};
+
+  console.log('📋 [WorkerPortfolioModal] Final portfolio items:', portfolioItems);
+
+  const handleStartChat = async () => {
+    if (!user || user.role !== 'employer') {
+      alert('Only employers can start chats with workers');
+      return;
+    }
+  
+    try {
+      navigate('/dashboard/chat', { 
+        state: { 
+          workerUserId: workerUser.id,
+          autoSelectChat: true 
+        } 
+      });
+      onClose();
+    } catch (error) {
+      console.error('Failed to start chat:', error);
+      toast.error('Failed to start chat. Please try again.');
+    }
+  };
+
+  const handleAssignWorker = () => {
+    console.log('🔍 [WorkerPortfolioModal] Assigning worker:', {
+      workerId,
+      workerUserId: workerUser?.id,
+      jobId
+    });
+    onAssign(workerId);
   };
 
   if (!workerData) {
@@ -60,43 +172,26 @@ export const WorkerPortfolioModal = ({
     );
   }
 
-  const { user: workerUser, profile, portfolio, reviews } = workerData;
-
-  const handleStartChat = async () => {
-    if (!user || user.role !== 'employer') {
-      alert('Only employers can start chats with workers');
-      return;
-    }
-  
-    try {
-      navigate('/dashboard/chat', { 
-        state: { 
-          workerUserId: workerUser.id, // This should be the worker's user ID
-          autoSelectChat: true 
-        } 
-      });
-      onClose(); // Close the modal
-    } catch (error) {
-      console.error('Failed to start chat:', error);
-      toast.error('Failed to start chat. Please try again.');
-    }
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Worker Profile: {workerUser?.name || 'Unknown Worker'}
+            <Badge variant="outline" className="ml-2">
+              {portfolioItems.length} Portfolio Items
+            </Badge>
           </DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+            <TabsTrigger value="profile">Profile & Details</TabsTrigger>
+            <TabsTrigger value="portfolio">
+              Portfolio ({portfolioItems.length})
+            </TabsTrigger>
+            <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
@@ -107,29 +202,29 @@ export const WorkerPortfolioModal = ({
                 <Card>
                   <CardContent className="p-6">
                     <div className="flex flex-col items-center text-center space-y-4">
-                      <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                      <div className="w-24 h-24 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white text-2xl font-bold">
                         {workerUser?.name?.charAt(0).toUpperCase() || 'W'}
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg">{workerUser?.name || 'Unknown'}</h3>
+                        <h3 className="font-bold text-xl">{workerUser?.name || 'Unknown'}</h3>
                         <p className="text-muted-foreground">@{workerUser?.username || 'worker'}</p>
                       </div>
                       
                       <Badge variant={profile?.is_available ? "default" : "secondary"}>
-                        {profile?.is_available ? 'Available' : 'Not Available'}
+                        {profile?.is_available ? 'Available for Work' : 'Not Available'}
                       </Badge>
 
                       {workerUser?.trust_score && (
                         <div className="flex items-center gap-2">
                           <Award className="h-4 w-4 text-emerald-600" />
-                          <span className="font-semibold">Trust: {workerUser.trust_score}%</span>
+                          <span className="font-semibold">Trust Score: {workerUser.trust_score}%</span>
                         </div>
                       )}
 
                       {workerUser?.verified && (
                         <div className="flex items-center gap-2 text-green-600">
                           <CheckCircle className="h-4 w-4" />
-                          <span className="text-sm">Verified</span>
+                          <span className="text-sm">Verified Worker</span>
                         </div>
                       )}
                     </div>
@@ -139,28 +234,56 @@ export const WorkerPortfolioModal = ({
                 {/* Contact & Rates */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Rates & Location</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Rates & Location
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
                         <span className="text-sm">Hourly Rate:</span>
-                        <span className="font-semibold">{formatCurrency(profile?.hourly_rate || 0)}</span>
+                        <span className="font-semibold text-lg">{formatCurrency(profile?.hourly_rate || 0)}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <span className="text-sm">Daily Rate:</span>
-                        <span className="font-semibold">{formatCurrency(profile?.daily_rate || 0)}</span>
+                        <span className="font-semibold text-lg">{formatCurrency(profile?.daily_rate || 0)}</span>
                       </div>
                     </div>
                     
-                    <div className="pt-2 border-t">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                    <div className="pt-3 border-t">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                         <MapPin className="h-4 w-4" />
-                        <span>Location</span>
+                        <span>Work Location</span>
                       </div>
-                      <p className="font-medium">
+                      <p className="font-medium text-lg">
                         {profile?.location_city}, {profile?.location_state}
                       </p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quick Stats */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Quick Stats</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-sm">Experience:</span>
+                      <span className="font-semibold">{profile?.experience_years || 0} years</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm">Jobs Completed:</span>
+                      <span className="font-semibold">{profile?.completed_jobs || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm">Portfolio Items:</span>
+                      <span className="font-semibold text-green-600">{portfolioItems.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm">Reviews:</span>
+                      <span className="font-semibold">{reviews.length}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -170,43 +293,73 @@ export const WorkerPortfolioModal = ({
               <div className="lg:col-span-2 space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Professional Information</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Briefcase className="h-5 w-5" />
+                      Professional Information
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-6">
                     <div>
-                      <h4 className="font-semibold mb-2">Category & Experience</h4>
-                      <div className="flex items-center gap-4">
-                        <Badge variant="secondary" className="capitalize">
-                          {profile?.category || 'General'}
+                      <h4 className="font-semibold text-lg mb-3">Category & Specialization</h4>
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <Badge variant="secondary" className="text-base capitalize px-3 py-1">
+                          {profile?.category || 'General Labor'}
                         </Badge>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm">
                           <Briefcase className="h-4 w-4 text-blue-600" />
-                          <span>{profile?.experience_years || 0} years experience</span>
+                          <span>{profile?.experience_years || 0} years professional experience</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm">
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>{profile?.completed_jobs || 0} jobs completed</span>
+                          <span>{profile?.completed_jobs || 0} successful jobs completed</span>
                         </div>
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="font-semibold mb-2">About</h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        {profile?.description || 'No description provided.'}
+                      <h4 className="font-semibold text-lg mb-3">About This Worker</h4>
+                      <p className="text-muted-foreground leading-relaxed text-base bg-slate-50 p-4 rounded-lg">
+                        {profile?.description || 'No professional description provided. This worker prefers to let their portfolio speak for their skills and experience.'}
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-yellow-600">
+                    {/* Skills */}
+                    {profile?.skills && profile.skills.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-lg mb-3">Skills & Expertise</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {profile.skills.map((skill, index) => (
+                            <Badge key={index} variant="outline" className="text-sm">
+                              {skill}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Rating Summary */}
+                    <div className="grid grid-cols-2 gap-6 pt-4 border-t">
+                      <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <p className="text-3xl font-bold text-yellow-600">
                           {profile?.rating?.toFixed(1) || '0.0'}
                         </p>
+                        <div className="flex justify-center my-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-4 w-4 ${
+                                star <= Math.round(profile?.rating || 0)
+                                  ? 'text-yellow-500 fill-current'
+                                  : 'text-gray-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
                         <p className="text-sm text-muted-foreground">Average Rating</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-green-600">
-                          {reviews?.length || 0}
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-3xl font-bold text-blue-600">
+                          {reviews.length}
                         </p>
                         <p className="text-sm text-muted-foreground">Total Reviews</p>
                       </div>
@@ -217,26 +370,27 @@ export const WorkerPortfolioModal = ({
                 {/* Action Buttons */}
                 <Card>
                   <CardContent className="p-6">
-                    <div className="flex gap-3">
+                    <div className="flex gap-4">
                       <Button 
-                        onClick={() => onAssign(workerId)}
-                        className="flex-1 gap-2"
+                        onClick={handleAssignWorker}
+                        className="flex-1 gap-2 py-3 text-lg"
                         size="lg"
                       >
-                        <Users className="h-4 w-4" />
+                        <Users className="h-5 w-5" />
                         Assign to Job
                       </Button>
                       <Button 
                         variant="outline" 
-                        className="gap-2"
+                        className="gap-2 py-3 text-lg"
                         onClick={handleStartChat}
+                        size="lg"
                       >
-                        <MessageCircle className="h-4 w-4" />
+                        <MessageCircle className="h-5 w-5" />
                         Send Message
                       </Button>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-3">
-                      Assigning this worker will create a contract and escrow for the job.
+                    <p className="text-sm text-muted-foreground mt-3 text-center">
+                      Assigning this worker will create a contract and escrow for the job. Review their portfolio below before making a decision.
                     </p>
                   </CardContent>
                 </Card>
@@ -244,43 +398,138 @@ export const WorkerPortfolioModal = ({
             </div>
           </TabsContent>
 
-          {/* Portfolio Tab */}
-          <TabsContent value="portfolio">
+          {/* Portfolio Tab - COMPLETELY REWRITTEN */}
+          <TabsContent value="portfolio" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Portfolio</CardTitle>
-                <CardDescription>
-                  Previous work and projects
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <Briefcase className="h-6 w-6" />
+                  Work Portfolio
+                </CardTitle>
+                <CardDescription className="text-lg">
+                  {portfolioItems.length > 0 
+                    ? `Viewing ${portfolioItems.length} project${portfolioItems.length !== 1 ? 's' : ''} from ${workerUser?.name || 'this worker'}`
+                    : 'No portfolio projects available'
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {portfolio && portfolio.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {portfolio.map((item) => (
-                      <Card key={item.id} className="overflow-hidden">
-                        {item.image_url && (
-                          <img 
-                            src={item.image_url} 
-                            alt={item.title}
-                            className="w-full h-48 object-cover"
-                          />
-                        )}
-                        <CardContent className="p-4">
-                          <h3 className="font-semibold mb-2">{item.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                            {item.description}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(item.project_date).toLocaleDateString()}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
+                {portfolioItems.length > 0 ? (
+                  <div className="space-y-6">
+                    {/* Portfolio Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {portfolioItems.map((item, index) => (
+                        <Card 
+                          key={item.id} 
+                          className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20 overflow-hidden"
+                        >
+                          {/* Image Section */}
+                          <div className="aspect-video bg-muted relative overflow-hidden">
+                            {item.image_url ? (
+                              <>
+                                <img 
+                                  src={item.image_url} 
+                                  alt={item.title}
+                                  className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                                  onError={(e) => {
+                                    console.error('❌ Image failed to load:', item.image_url);
+                                    // Hide the image and show fallback
+                                    e.currentTarget.style.display = 'none';
+                                    const parent = e.currentTarget.parentElement;
+                                    if (parent) {
+                                      const fallback = document.createElement('div');
+                                      fallback.className = 'w-full h-48 bg-gradient-to-br from-gray-200 to-gray-300 flex flex-col items-center justify-center text-gray-500';
+                                      fallback.innerHTML = `
+                                        <ImageIcon class="h-12 w-12 mb-2 opacity-50" />
+                                        <span class="text-sm">Image not available</span>
+                                      `;
+                                      parent.appendChild(fallback);
+                                    }
+                                  }}
+                                  onLoad={() => console.log('✅ Image loaded successfully:', item.image_url)}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+                              </>
+                            ) : (
+                              <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex flex-col items-center justify-center text-gray-400">
+                                <ImageIcon className="h-16 w-16 mb-2 opacity-50" />
+                                <span className="text-sm">No project image</span>
+                              </div>
+                            )}
+                            
+                            {/* Project Date Badge */}
+                            <div className="absolute top-3 left-3">
+                              <Badge variant="secondary" className="bg-black/70 text-white backdrop-blur-sm">
+                                <Calendar className="h-3 w-3 mr-1" />
+                                {formatDate(item.project_date)}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          {/* Content Section */}
+                          <CardContent className="p-4 space-y-3">
+                            <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                              {item.title}
+                            </h3>
+                            
+                            <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                              {item.description}
+                            </p>
+                            
+                            {/* Project Meta */}
+                            <div className="flex justify-between items-center pt-2 border-t">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                {item.category && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.category}
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {item.created_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  Added {formatDate(item.created_at)}
+                                </span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Portfolio Summary */}
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-blue-900 text-lg">Portfolio Summary</h4>
+                            <p className="text-blue-700 text-sm">
+                              {workerUser?.name || 'This worker'} has {portfolioItems.length} project{portfolioItems.length !== 1 ? 's' : ''} in their portfolio
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="bg-white text-blue-700 border-blue-300 text-lg py-1 px-3">
+                            {portfolioItems.length} Projects
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No portfolio items yet</p>
+                  <div className="text-center py-12">
+                    <div className="bg-gradient-to-br from-gray-100 to-gray-200 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Briefcase className="h-10 w-10 text-gray-400" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Portfolio Projects</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto mb-6">
+                      {workerUser?.name || 'This worker'} hasn't added any portfolio projects yet. 
+                      You can still hire them based on their profile information and reviews.
+                    </p>
+                    <Button 
+                      onClick={() => setActiveTab('profile')}
+                      variant="outline"
+                    >
+                      View Profile Details
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -291,29 +540,37 @@ export const WorkerPortfolioModal = ({
           <TabsContent value="reviews">
             <Card>
               <CardHeader>
-                <CardTitle>Reviews & Ratings</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <Star className="h-6 w-6" />
+                  Reviews & Ratings
+                </CardTitle>
+                <CardDescription className="text-lg">
+                  Feedback from previous employers ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {reviews && reviews.length > 0 ? (
+                {reviews.length > 0 ? (
                   <ScrollArea className="h-96">
                     <div className="space-y-4">
-                      {reviews.map((review) => (
-                        <Card key={review.id}>
-                          <CardContent className="p-4">
-                            <div className="flex justify-between items-start mb-2">
+                      {reviews.map((review, index) => (
+                        <Card key={review.id || `review-${index}`} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-6">
+                            <div className="flex justify-between items-start mb-4">
                               <div>
-                                <h4 className="font-semibold">{review.reviewer?.name || 'Anonymous'}</h4>
+                                <h4 className="font-semibold text-lg">
+                                  {review.reviewer?.name || 'Anonymous Employer'}
+                                </h4>
                                 <p className="text-sm text-muted-foreground">
-                                  {new Date(review.created_at).toLocaleDateString()}
+                                  {review.created_at ? formatDate(review.created_at) : 'Date not available'}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                                <span className="font-semibold">{review.rating}.0</span>
+                              <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
+                                <Star className="h-5 w-5 text-yellow-500 fill-current" />
+                                <span className="font-semibold text-yellow-700">{review.rating}.0</span>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              {review.comment}
+                            <p className="text-muted-foreground leading-relaxed bg-gray-50 p-4 rounded-lg">
+                              {review.comment || 'No comment provided.'}
                             </p>
                           </CardContent>
                         </Card>
@@ -321,9 +578,15 @@ export const WorkerPortfolioModal = ({
                     </div>
                   </ScrollArea>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No reviews yet</p>
+                  <div className="text-center py-12">
+                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Star className="h-10 w-10 text-yellow-400" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Reviews Yet</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      {workerUser?.name || 'This worker'} hasn't received any reviews yet. 
+                      Be the first to work with them and leave a review!
+                    </p>
                   </div>
                 )}
               </CardContent>

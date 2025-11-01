@@ -5,10 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { MapPin, Calendar, DollarSign, Clock, User, ArrowLeft, Building, Shield, Users, FileText, X } from 'lucide-react';
+import { MapPin, Calendar, DollarSign, Clock, User, ArrowLeft, Building, Shield, Users, FileText, X, Star, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { WorkerPortfolioModal } from './WorkerPortfolioModal';
-import { fetchWorkerProfile, CompleteWorkerData } from '../utils/workerUtils';
+import { fetchCompleteWorkerData, CompleteWorkerData } from '../utils/workerUtils';
 
 interface Job {
   id: string;
@@ -40,7 +40,11 @@ interface Job {
 interface WorkerUserResponse {
   id: string;
   name: string;
+  username: string;
   email: string;
+  avatar_url: string;
+  verified: boolean;
+  trust_score: number;
 }
 
 interface WorkerProfileApplicationResponse {
@@ -60,12 +64,15 @@ interface JobApplication {
   worker_user_id?: string;
   worker?: WorkerUserResponse | null;
   worker_profile?: WorkerProfileApplicationResponse | null;
+  worker_portfolio?: any[]; // Add this line
+  worker_reviews?: any[]; // Add this line
   proposed_rate: number;
   estimated_completion: number;
   cover_letter: string;
   status: string;
   created_at: string;
 }
+
 
 export const JobDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -143,72 +150,191 @@ export const JobDetails = () => {
     }
   };
 
-  const fetchJobApplications = async (jobId: string) => {
-  try {
-    console.log('📥 [JobDetails] Fetching applications for job:', jobId);
+  // const fetchJobApplications = async (jobId: string) => {
+  // try {
+  //   console.log('📥 [JobDetails] Fetching applications for job:', jobId);
     
-    const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+  //   const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
+  //     headers: {
+  //       'Authorization': `Bearer ${token}`,
+  //       'Content-Type': 'application/json',
+  //     },
+  //   });
 
-    if (response.ok) {
-        const data = await response.json();
-        console.log('🔍 [JobDetails] Applications API Response:', data);
+  //   if (response.ok) {
+  //       const data = await response.json();
+  //       console.log('🔍 [JobDetails] Applications API Response:', data);
         
-        const applicationsData = data.data || data.applications || [];
-        setApplications(applicationsData);
+  //       const applicationsData = data.data || data.applications || [];
+  //       console.log('📊 [JobDetails] Portfolio data in applications:', 
+  //         applicationsData.map((app: any) => ({
+  //           worker: app.worker?.name,
+  //           portfolioCount: app.worker_portfolio?.length,
+  //           hasPortfolio: !!app.worker_portfolio
+  //         }))
+  //       );
+        
+  //       setApplications(applicationsData);
 
-        // Fetch worker profiles for each application
-        applicationsData.forEach((application: JobApplication) => {
-          loadWorkerProfile(application);
-        });
-      } else {
-        console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
-      }
-    } catch (error) {
-      console.error('❌ [JobDetails] Error fetching applications:', error);
-    }
-  };
+  //       // Fetch worker profiles for each application
+  //       applicationsData.forEach((application: JobApplication) => {
+  //         loadWorkerProfile(application);
+  //       });
+  //     } else {
+  //       console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
+  //     }
+  //   } catch (error) {
+  //     console.error('❌ [JobDetails] Error fetching applications:', error);
+  //   }
+  // };
 
- const loadWorkerProfile = async (application: JobApplication) => {
-  const workerId = application.worker_id; // This is the worker_profile.id
+// const loadWorkerProfile = async (application: JobApplication) => {
+//   const userIdToUse = application.worker_user_id || application.worker_id;
   
-  console.log('🔍 [loadWorkerProfile] Loading profile for worker ID:', workerId);
+//   console.log('🔍 [loadWorkerProfile] Loading profile for user:', {
+//     userId: userIdToUse,
+//     worker_user_id: application.worker_user_id,
+//     worker_id: application.worker_id,
+//     workerName: application.worker?.name,
+//     hasPortfolio: application.worker_portfolio?.length,
+//     hasProfile: !!application.worker_profile
+//   });
 
-  // Skip if already loaded or loading
-  if (workerProfiles.has(workerId) || loadingProfiles.has(workerId)) {
-    return;
-  }
+//   // Skip if already loaded or loading
+//   if (workerProfiles.has(userIdToUse) || loadingProfiles.has(userIdToUse)) {
+//     return;
+//   }
 
-  setLoadingProfiles(prev => new Set(prev).add(workerId));
+//   setLoadingProfiles(prev => new Set(prev).add(userIdToUse));
 
-  try {
-    if (!token) {
-      console.error('❌ [loadWorkerProfile] No token available');
-      return;
-    }
+//   try {
+//     // If we already have portfolio and profile data from the application, use it directly
+//     if (application.worker_portfolio !== undefined || application.worker_profile !== undefined) {
+//       console.log('✅ [loadWorkerProfile] Using application data directly');
+      
+//       const workerData: CompleteWorkerData = {
+//         user: {
+//           id: userIdToUse,
+//           name: application.worker?.name || 'Unknown Worker',
+//           email: application.worker?.email || 'No email available',
+//           username: application.worker?.username || '',
+//           avatar_url: application.worker?.avatar_url,
+//           verified: application.worker?.verified || false,
+//           trust_score: application.worker?.trust_score || 0
+//         },
+//         profile: application.worker_profile || {
+//           id: application.worker_id,
+//           experience_years: 0,
+//           category: 'Unknown',
+//           description: 'Profile not available',
+//           hourly_rate: 0,
+//           daily_rate: 0,
+//           location_state: '',
+//           location_city: '',
+//           is_available: false,
+//           completed_jobs: 0,
+//           rating: 0
+//         },
+//         portfolio: application.worker_portfolio || [],
+//         reviews: application.worker_reviews || []
+//       };
+      
+//       console.log('📊 [loadWorkerProfile] Created worker data from application:', {
+//         portfolioCount: workerData.portfolio.length,
+//         profile: workerData.profile
+//       });
+      
+//       setWorkerProfiles(prev => new Map(prev).set(userIdToUse, workerData));
+//       return;
+//     }
+
+//     // Fallback to API call if no data in application
+//     console.log('🔄 [loadWorkerProfile] No application data, calling API...');
     
-    // Use the new function that handles worker_id
-    const workerData = await fetchWorkerProfile(workerId, token, true); // true = this is a worker_id
-    if (workerData) {
-      setWorkerProfiles(prev => new Map(prev).set(workerId, workerData));
-      console.log('✅ [loadWorkerProfile] Successfully loaded worker profile');
-    } else {
-      console.error('❌ [loadWorkerProfile] Failed to load worker profile');
-    }
-  } catch (error) {
-    console.error('❌ [loadWorkerProfile] Error loading worker profile:', error);
-  } finally {
-    setLoadingProfiles(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(workerId);
-      return newSet;
-    });
-  }
-};
+//     if (!token) {
+//       console.error('❌ [loadWorkerProfile] No token available');
+//       return;
+//     }
+    
+//     const workerData = await fetchCompleteWorkerData(userIdToUse);
+    
+//     if (workerData) {
+//       console.log('✅ [loadWorkerProfile] Successfully loaded worker profile from API');
+//       setWorkerProfiles(prev => new Map(prev).set(userIdToUse, workerData));
+//     } else {
+//       console.error('❌ [loadWorkerProfile] Failed to load worker profile - no data returned');
+      
+//       // Create fallback data
+//       const fallbackData: CompleteWorkerData = {
+//         user: {
+//           id: userIdToUse,
+//           name: application.worker?.name || 'Unknown Worker',
+//           email: application.worker?.email || 'No email available',
+//           username: application.worker?.username || '',
+//           avatar_url: application.worker?.avatar_url,
+//           verified: false,
+//           trust_score: 0
+//         },
+//         profile: {
+//           id: application.worker_id,
+//           experience_years: 0,
+//           category: 'Unknown',
+//           description: 'Profile not available',
+//           hourly_rate: 0,
+//           daily_rate: 0,
+//           location_state: '',
+//           location_city: '',
+//           is_available: false,
+//           completed_jobs: 0,
+//           rating: 0
+//         },
+//         portfolio: [],
+//         reviews: []
+//       };
+      
+//       setWorkerProfiles(prev => new Map(prev).set(userIdToUse, fallbackData));
+//     }
+//   } catch (error) {
+//     console.error('❌ [loadWorkerProfile] Error loading worker profile:', error);
+    
+//     // Create fallback data even on error
+//     const fallbackData: CompleteWorkerData = {
+//       user: {
+//         id: userIdToUse,
+//         name: application.worker?.name || 'Unknown Worker',
+//         email: application.worker?.email || 'No email available',
+//         username: application.worker?.username || '',
+//         avatar_url: application.worker?.avatar_url,
+//         verified: false,
+//         trust_score: 0
+//       },
+//       profile: {
+//         id: application.worker_id,
+//         experience_years: 0,
+//         category: 'Unknown',
+//         description: 'Profile not available',
+//         hourly_rate: 0,
+//         daily_rate: 0,
+//         location_state: '',
+//         location_city: '',
+//         is_available: false,
+//         completed_jobs: 0,
+//         rating: 0
+//       },
+//       portfolio: application.worker_portfolio || [], // Still try to use portfolio if available
+//       reviews: application.worker_reviews || []
+//     };
+    
+//     setWorkerProfiles(prev => new Map(prev).set(userIdToUse, fallbackData));
+//   } finally {
+//     setLoadingProfiles(prev => {
+//       const newSet = new Set(prev);
+//       newSet.delete(userIdToUse);
+//       return newSet;
+//     });
+//   }
+// };
+
 
 // Update the function that loads all worker profiles
 useEffect(() => {
@@ -219,23 +345,36 @@ useEffect(() => {
   }
 }, [applications]);
 
-// Update handleViewWorkerProfile
-const handleViewWorkerProfile = async (application: JobApplication) => {
-  const workerId = application.worker_id;
+// In JobDetails.tsx - Update the handleViewWorkerProfile function
+// const handleViewWorkerProfile = async (application: JobApplication) => {
+//   // Use worker_user_id if available, otherwise fall back to worker_id
+//   const userIdToUse = application.worker_user_id || application.worker_id;
   
-  // Ensure we have the latest worker data
-  if (!workerProfiles.has(workerId)) {
-    await loadWorkerProfile(application);
-  }
-  setSelectedWorker(workerId);
-  setShowWorkerModal(true);
-};
+//   console.log('🔍 [handleViewWorkerProfile] Viewing profile for user:', userIdToUse);
+
+//   // Ensure we have the latest worker data
+//   if (!workerProfiles.has(userIdToUse)) {
+//     await loadWorkerProfile(application);
+//   }
+//   setSelectedWorker(userIdToUse);
+//   setShowWorkerModal(true);
+// };
 
 
   // In JobDetails.tsx - Update handleAcceptApplication
-const handleAcceptApplication = async (applicationId: string, workerId: string) => {
+const handleAcceptApplication = async (applicationId: string, workerId: string, workerUserId?: string) => {
   try {
-    console.log('✅ [JobDetails] Accepting application:', applicationId);
+    console.log('✅ [JobDetails] Accepting application:', {
+      applicationId,
+      workerId,
+      workerUserId,
+      jobId: job?.id
+    });
+    
+    // Use worker_user_id if available, otherwise fall back to worker_id
+    const workerIdToSend = workerUserId || workerId;
+    
+    console.log('📤 [JobDetails] Sending worker ID to backend:', workerIdToSend);
     
     const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job?.id}/assign`, {
       method: 'PUT',
@@ -244,12 +383,13 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
-        worker_id: workerId,
+        worker_id: workerIdToSend,
       }),
     });
 
     if (response.ok) {
       const result = await response.json();
+      console.log('✅ [JobDetails] Assignment successful:', result);
       toast.success('Worker assigned successfully! Contract created.');
       
       // Refresh applications and job data
@@ -260,6 +400,7 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
       setShowWorkerModal(false);
     } else {
       const errorData = await response.json();
+      console.error('❌ [JobDetails] Assignment failed:', errorData);
       throw new Error(errorData.message || 'Failed to assign worker');
     }
   } catch (error: any) {
@@ -342,8 +483,264 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
     });
   };
 
+  //////added this
 
- const renderApplicationsSection = () => {
+  const handleViewWorkerProfile = async (application: JobApplication) => {
+  const userIdToUse = application.worker_user_id || application.worker_id;
+  
+  console.log('🔍 [handleViewWorkerProfile] Viewing profile for user:', userIdToUse);
+  console.log('📊 [handleViewWorkerProfile] Application portfolio data:', {
+    hasPortfolio: !!application.worker_portfolio,
+    portfolioCount: application.worker_portfolio?.length,
+    portfolioItems: application.worker_portfolio
+  });
+
+  // If we have portfolio data in the application, create worker data immediately
+  if (application.worker_portfolio || application.worker_profile) {
+    console.log('✅ [handleViewWorkerProfile] Using application data directly');
+    
+    const workerData: CompleteWorkerData = {
+      user: {
+        id: userIdToUse,
+        name: application.worker?.name || 'Unknown Worker',
+        email: application.worker?.email || 'No email available',
+        username: application.worker?.username || '',
+        avatar_url: application.worker?.avatar_url,
+        verified: application.worker?.verified || false,
+        trust_score: application.worker?.trust_score || 0
+      },
+      profile: application.worker_profile || {
+        id: application.worker_id,
+        experience_years: 0,
+        category: 'Unknown',
+        description: 'Profile not available',
+        hourly_rate: 0,
+        daily_rate: 0,
+        location_state: '',
+        location_city: '',
+        is_available: false,
+        completed_jobs: 0,
+        rating: 0
+      },
+      portfolio: application.worker_portfolio || [],
+      reviews: application.worker_reviews || []
+    };
+    
+    console.log('🎯 [handleViewWorkerProfile] Setting worker data immediately:', {
+      portfolioCount: workerData.portfolio.length,
+      profile: workerData.profile
+    });
+    
+    // Set the worker data immediately in the profiles map
+    setWorkerProfiles(prev => new Map(prev).set(userIdToUse, workerData));
+    setSelectedWorker(userIdToUse);
+    setShowWorkerModal(true);
+    return;
+  }
+
+  // Fallback to loading from API if no application data
+  console.log('🔄 [handleViewWorkerProfile] No application data, loading from API...');
+  
+  // Ensure we have the latest worker data
+  if (!workerProfiles.has(userIdToUse)) {
+    await loadWorkerProfile(application);
+  }
+  setSelectedWorker(userIdToUse);
+  setShowWorkerModal(true);
+};
+
+// Also update the loadWorkerProfile to be more aggressive about using application data
+const loadWorkerProfile = async (application: JobApplication) => {
+  const userIdToUse = application.worker_user_id || application.worker_id;
+  
+  console.log('🔍 [loadWorkerProfile] Loading profile for user:', {
+    userId: userIdToUse,
+    hasPortfolio: application.worker_portfolio?.length,
+    hasProfile: !!application.worker_profile
+  });
+
+  // Skip if already loaded
+  if (workerProfiles.has(userIdToUse)) {
+    console.log('⏩ [loadWorkerProfile] Profile already loaded, skipping');
+    return;
+  }
+
+  setLoadingProfiles(prev => new Set(prev).add(userIdToUse));
+
+  try {
+    // ALWAYS use application data first if available - this is the key fix
+    if (application.worker_portfolio !== undefined || application.worker_profile !== undefined) {
+      console.log('✅ [loadWorkerProfile] Using application data directly');
+      
+      const workerData: CompleteWorkerData = {
+        user: {
+          id: userIdToUse,
+          name: application.worker?.name || 'Unknown Worker',
+          email: application.worker?.email || 'No email available',
+          username: application.worker?.username || '',
+          avatar_url: application.worker?.avatar_url,
+          verified: application.worker?.verified || false,
+          trust_score: application.worker?.trust_score || 0
+        },
+        profile: application.worker_profile || {
+          id: application.worker_id,
+          experience_years: 0,
+          category: 'Unknown',
+          description: 'Profile not available',
+          hourly_rate: 0,
+          daily_rate: 0,
+          location_state: '',
+          location_city: '',
+          is_available: false,
+          completed_jobs: 0,
+          rating: 0
+        },
+        portfolio: application.worker_portfolio || [],
+        reviews: application.worker_reviews || []
+      };
+      
+      console.log('📊 [loadWorkerProfile] Created worker data from application:', {
+        portfolioCount: workerData.portfolio.length,
+        firstPortfolioItem: workerData.portfolio[0]
+      });
+      
+      setWorkerProfiles(prev => new Map(prev).set(userIdToUse, workerData));
+      return;
+    }
+
+    // Only fallback to API if no application data
+    console.log('🔄 [loadWorkerProfile] No application data, calling API...');
+    
+    if (!token) {
+      console.error('❌ [loadWorkerProfile] No token available');
+      return;
+    }
+    
+    const workerData = await fetchCompleteWorkerData(userIdToUse);
+    
+    if (workerData) {
+      console.log('✅ [loadWorkerProfile] Successfully loaded worker profile from API');
+      setWorkerProfiles(prev => new Map(prev).set(userIdToUse, workerData));
+    } else {
+      console.error('❌ [loadWorkerProfile] Failed to load worker profile - no data returned');
+      
+      // Create minimal fallback data
+      const fallbackData: CompleteWorkerData = {
+        user: {
+          id: userIdToUse,
+          name: application.worker?.name || 'Unknown Worker',
+          email: application.worker?.email || 'No email available',
+          username: application.worker?.username || '',
+          avatar_url: application.worker?.avatar_url,
+          verified: false,
+          trust_score: 0
+        },
+        profile: {
+          id: application.worker_id,
+          experience_years: 0,
+          category: 'Unknown',
+          description: 'Profile not available',
+          hourly_rate: 0,
+          daily_rate: 0,
+          location_state: '',
+          location_city: '',
+          is_available: false,
+          completed_jobs: 0,
+          rating: 0
+        },
+        portfolio: [],
+        reviews: []
+      };
+      
+      setWorkerProfiles(prev => new Map(prev).set(userIdToUse, fallbackData));
+    }
+  } catch (error) {
+    console.error('❌ [loadWorkerProfile] Error loading worker profile:', error);
+    
+    // Create fallback data with application portfolio if available
+    const fallbackData: CompleteWorkerData = {
+      user: {
+        id: userIdToUse,
+        name: application.worker?.name || 'Unknown Worker',
+        email: application.worker?.email || 'No email available',
+        username: application.worker?.username || '',
+        avatar_url: application.worker?.avatar_url,
+        verified: false,
+        trust_score: 0
+      },
+      profile: {
+        id: application.worker_id,
+        experience_years: 0,
+        category: 'Unknown',
+        description: 'Profile not available',
+        hourly_rate: 0,
+        daily_rate: 0,
+        location_state: '',
+        location_city: '',
+        is_available: false,
+        completed_jobs: 0,
+        rating: 0
+      },
+      portfolio: application.worker_portfolio || [], // Use application portfolio if available
+      reviews: application.worker_reviews || []
+    };
+    
+    setWorkerProfiles(prev => new Map(prev).set(userIdToUse, fallbackData));
+  } finally {
+    setLoadingProfiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(userIdToUse);
+      return newSet;
+    });
+  }
+};
+
+// Update the fetchJobApplications to log the exact data structure
+const fetchJobApplications = async (jobId: string) => {
+  try {
+    console.log('📥 [JobDetails] Fetching applications for job:', jobId);
+    
+    const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${jobId}/applications`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 [JobDetails] Full Applications API Response:', data);
+        
+        const applicationsData = data.data || data.applications || [];
+        
+        // Log detailed portfolio information
+        applicationsData.forEach((app: any, index: number) => {
+          console.log(`📊 [Application ${index}] Portfolio Data:`, {
+            workerName: app.worker?.name,
+            hasWorkerPortfolio: !!app.worker_portfolio,
+            workerPortfolioCount: app.worker_portfolio?.length,
+            workerPortfolioItems: app.worker_portfolio,
+            hasWorkerProfile: !!app.worker_profile,
+            workerProfile: app.worker_profile
+          });
+        });
+        
+        setApplications(applicationsData);
+
+        // Pre-load worker profiles for all applications
+        applicationsData.forEach((application: JobApplication) => {
+          loadWorkerProfile(application);
+        });
+      } else {
+        console.error('❌ [JobDetails] Failed to fetch applications:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [JobDetails] Error fetching applications:', error);
+    }
+  };
+
+// Update the application rendering to remove debug info and show better portfolio preview
+const renderApplicationsSection = () => {
   if (!isJobOwner || !applications.length) return null;
 
   return (
@@ -358,7 +755,7 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
             </Badge>
           </CardTitle>
           <CardDescription>
-            Review applications from workers. Click "View Profile" to see complete worker details.
+            Review applications from workers. Click "View Profile" to see their portfolio, reviews, and complete details.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -367,100 +764,161 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
               const userIdToUse = application.worker_user_id || application.worker_id;
               const workerProfile = workerProfiles.get(userIdToUse);
               const isLoading = loadingProfiles.has(userIdToUse);
+              
+              const hasPortfolioInApplication = application.worker_portfolio && application.worker_portfolio.length > 0;
+              const portfolioCount = hasPortfolioInApplication 
+                ? application.worker_portfolio.length 
+                : (workerProfile?.portfolio?.length || 0);
+
+              // Get portfolio preview (first 2 items)
+              const portfolioPreview = hasPortfolioInApplication 
+                ? application.worker_portfolio.slice(0, 2) 
+                : (workerProfile?.portfolio?.slice(0, 2) || []);
 
               return (
-                <Card key={application.id} className="p-4 hover:shadow-md transition-shadow">
+                <Card key={application.id} className="p-4 hover:shadow-lg transition-all duration-300 border-2">
                   <div className="flex justify-between items-start">
-                    <div className="space-y-3 flex-1">
+                    <div className="space-y-4 flex-1">
                       {/* Worker Info */}
-                      <div className="flex items-center gap-3">
-                        <div className="bg-primary/10 p-2 rounded-full">
-                          <User className="h-4 w-4 text-primary" />
+                      <div className="flex items-start gap-4">
+                        <div className="bg-primary/10 p-3 rounded-full">
+                          <User className="h-6 w-6 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium">
-                            {workerProfile?.user?.name || application.worker?.name || `Worker ${application.worker_id.substring(0, 8)}`}
-                          </p>
-                          <div className="text-sm text-muted-foreground">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-bold text-lg">
+                              {workerProfile?.user?.name || application.worker?.name || `Worker ${application.worker_id.substring(0, 8)}`}
+                            </h3>
+                            <Badge variant={
+                              application.status === 'accepted' ? 'default' : 
+                              application.status === 'rejected' ? 'destructive' : 'secondary'
+                            }>
+                              {application.status || 'pending'}
+                            </Badge>
+                          </div>
+                          
+                          <div className="text-sm text-muted-foreground space-y-1">
                             <p>{workerProfile?.user?.email || application.worker?.email || 'Email not available'}</p>
+                            
                             {workerProfile?.profile && (
-                              <p>
-                                {workerProfile.profile.experience_years} years experience • {workerProfile.profile.category}
+                              <div className="flex items-center gap-4 flex-wrap">
+                                <span className="flex items-center gap-1">
+                                  <Briefcase className="h-3 w-3" />
+                                  {workerProfile.profile.experience_years} years experience
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {workerProfile.profile.category}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Portfolio Preview */}
+                            {portfolioCount > 0 && (
+                              <div className="mt-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-sm font-medium text-green-700">
+                                    {portfolioCount} portfolio item{portfolioCount !== 1 ? 's' : ''}
+                                  </span>
+                                  {portfolioPreview.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      (Previewing {portfolioPreview.length} of {portfolioCount})
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                {/* Portfolio Items Preview */}
+                                {portfolioPreview.length > 0 && (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                                    {portfolioPreview.map((item, index) => (
+                                      <div key={item.id || index} className="flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                                        {item.image_url ? (
+                                          <img 
+                                            src={item.image_url} 
+                                            alt={item.title}
+                                            className="w-10 h-10 object-cover rounded"
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                            }}
+                                          />
+                                        ) : (
+                                          <div className="w-10 h-10 bg-green-200 rounded flex items-center justify-center">
+                                            <Briefcase className="h-4 w-4 text-green-600" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium truncate">{item.title}</p>
+                                          <p className="text-xs text-muted-foreground truncate">
+                                            {new Date(item.project_date).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {workerProfile?.reviews && workerProfile.reviews.length > 0 && (
+                              <p className="text-sm text-blue-600 flex items-center gap-1">
+                                <Star className="h-3 w-3 fill-current" />
+                                {workerProfile.reviews.length} reviews • Rating: {workerProfile.profile.rating?.toFixed(1) || '0.0'}/5
                               </p>
                             )}
                           </div>
                         </div>
-                        <Badge variant={
-                          application.status === 'accepted' ? 'default' : 
-                          application.status === 'rejected' ? 'destructive' : 'secondary'
-                        }>
-                          {application.status || 'pending'}
-                        </Badge>
                       </div>
 
-                      {/* Rest of the application details remain the same */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      {/* Application Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                         <div className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <span>Proposed: {formatCurrency(application.proposed_rate)}</span>
+                          <DollarSign className="h-4 w-4 mr-2 text-green-600" />
+                          <span className="font-semibold">Proposed Rate: {formatCurrency(application.proposed_rate)}</span>
                         </div>
                         <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <span>Estimate: {application.estimated_completion} days</span>
+                          <Calendar className="h-4 w-4 mr-2 text-blue-600" />
+                          <span className="font-semibold">Timeline: {application.estimated_completion} days</span>
                         </div>
                       </div>
 
                       <div>
-                        <p className="text-sm font-medium mb-1">Cover Letter:</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-slate-50 p-3 rounded">
+                        <p className="text-sm font-medium mb-2">Cover Letter:</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-blue-50 p-4 rounded-lg border border-blue-200">
                           {application.cover_letter}
                         </p>
                       </div>
-
-                      {/* Profile Status */}
-                      {!workerProfile && !isLoading && (
-                        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                          <span className="text-xs">ℹ️</span>
-                          <span>Full profile not available - basic contact information shown</span>
-                        </div>
-                      )}
-
-                      {isLoading && (
-                        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                          <span>Loading worker profile...</span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Action Buttons */}
                     {application.status === 'pending' && (
-                      <div className="flex flex-col gap-2 ml-4">
+                      <div className="flex flex-col gap-3 ml-6 min-w-[140px]">
                         <Button
-                          size="sm"
                           onClick={() => handleViewWorkerProfile(application)}
                           variant="outline"
-                          className="flex items-center gap-1"
+                          className="flex items-center gap-2"
                           disabled={isLoading}
                         >
-                          <User className="h-3 w-3" />
-                          {isLoading ? 'Loading...' : 'View Profile'}
+                          <User className="h-4 w-4" />
+                          {isLoading ? 'Loading...' : 'View Full Profile'}
                         </Button>
                         <Button
-                          size="sm"
-                          onClick={() => handleAcceptApplication(application.id, application.worker_id)}
-                          className="flex items-center gap-1"
+                          onClick={() => handleAcceptApplication(
+                            application.id, 
+                            application.worker_id,
+                            application.worker_user_id
+                          )}
+                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
                           disabled={isLoading}
                         >
-                          <Users className="h-3 w-3" />
-                          Accept & Assign
+                          <Users className="h-4 w-4" />
+                          Accept & Hire
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2 border-red-200"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-4 w-4" />
                           Reject
                         </Button>
                       </div>
@@ -483,12 +941,23 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
           setSelectedWorker(null);
         }}
         onAssign={(workerId) => {
+          console.log('🔍 [JobDetails] Modal onAssign called with workerId:', workerId);
+          
           const application = applications.find(app => {
-            const appUserId = app.worker_user_id || app.worker_id;
-            return appUserId === workerId;
+            const appWorkerId = app.worker_user_id || app.worker_id;
+            return appWorkerId === workerId;
           });
+          
           if (application) {
-            handleAcceptApplication(application.id, application.worker_id);
+            console.log('✅ [JobDetails] Found matching application:', application.id);
+            handleAcceptApplication(
+              application.id, 
+              application.worker_id,
+              application.worker_user_id
+            );
+          } else {
+            console.error('❌ [JobDetails] No matching application found for workerId:', workerId);
+            toast.error('Could not find application to assign');
           }
         }}
         jobId={job?.id}
@@ -496,6 +965,191 @@ const handleAcceptApplication = async (applicationId: string, workerId: string) 
     </>
   );
 };
+
+  //////// ended here
+
+ // Update the application rendering to show portfolio info
+// const renderApplicationsSection = () => {
+//   if (!isJobOwner || !applications.length) return null;
+
+//   return (
+//     <>
+//       <Card>
+//         <CardHeader>
+//           <CardTitle className="flex items-center gap-2">
+//             <Users className="h-5 w-5" />
+//             Job Applications
+//             <Badge variant="secondary">
+//               {applications.length} application{applications.length !== 1 ? 's' : ''}
+//             </Badge>
+//           </CardTitle>
+//           <CardDescription>
+//             Review applications from workers. Click "View Profile" to see complete worker details.
+//           </CardDescription>
+//         </CardHeader>
+//         <CardContent>
+//           <div className="space-y-4">
+//             {applications.map((application) => {
+//               const userIdToUse = application.worker_user_id || application.worker_id;
+//               const workerProfile = workerProfiles.get(userIdToUse);
+//               const isLoading = loadingProfiles.has(userIdToUse);
+              
+//               // Check if portfolio data is available in the application itself
+//               const hasPortfolioInApplication = application.worker_portfolio && application.worker_portfolio.length > 0;
+//               const portfolioCount = hasPortfolioInApplication 
+//                 ? application.worker_portfolio.length 
+//                 : (workerProfile?.portfolio?.length || 0);
+
+//               return (
+//                 <Card key={application.id} className="p-4 hover:shadow-md transition-shadow">
+//                   <div className="flex justify-between items-start">
+//                     <div className="space-y-3 flex-1">
+//                       {/* Worker Info */}
+//                       <div className="flex items-center gap-3">
+//                         <div className="bg-primary/10 p-2 rounded-full">
+//                           <User className="h-4 w-4 text-primary" />
+//                         </div>
+//                         <div className="flex-1">
+//                           <p className="font-medium">
+//                             {workerProfile?.user?.name || application.worker?.name || `Worker ${application.worker_id.substring(0, 8)}`}
+//                           </p>
+//                           <div className="text-sm text-muted-foreground">
+//                             <p>{workerProfile?.user?.email || application.worker?.email || 'Email not available'}</p>
+//                             {workerProfile?.profile && (
+//                               <p>
+//                                 {workerProfile.profile.experience_years} years experience • {workerProfile.profile.category}
+//                               </p>
+//                             )}
+
+//                             {/* Portfolio Info */}
+//                             {portfolioCount > 0 && (
+//                               <p className="text-sm text-green-600">
+//                                 {portfolioCount} portfolio item{portfolioCount !== 1 ? 's' : ''}
+//                                 {hasPortfolioInApplication && ' (from application)'}
+//                               </p>
+//                             )}
+
+//                             {workerProfile?.reviews && workerProfile.reviews.length > 0 && (
+//                               <p className="text-sm text-blue-600">
+//                                 {workerProfile.reviews.length} reviews • ⭐ {workerProfile.profile.rating?.toFixed(1) || '0.0'}
+//                               </p>
+//                             )}
+//                           </div>
+//                         </div>
+//                         <Badge variant={
+//                           application.status === 'accepted' ? 'default' : 
+//                           application.status === 'rejected' ? 'destructive' : 'secondary'
+//                         }>
+//                           {application.status || 'pending'}
+//                         </Badge>
+//                       </div>
+
+//                       {/* Application Details */}
+//                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+//                         <div className="flex items-center">
+//                           <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
+//                           <span>Proposed: {formatCurrency(application.proposed_rate)}</span>
+//                         </div>
+//                         <div className="flex items-center">
+//                           <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+//                           <span>Estimate: {application.estimated_completion} days</span>
+//                         </div>
+//                       </div>
+
+//                       <div>
+//                         <p className="text-sm font-medium mb-1">Cover Letter:</p>
+//                         <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-slate-50 p-3 rounded">
+//                           {application.cover_letter}
+//                         </p>
+//                       </div>
+
+//                       {/* Debug Info */}
+//                       <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+//                         <strong>Data Source:</strong> 
+//                         {hasPortfolioInApplication ? ' Application API' : ' Worker Profile API'} | 
+//                         Portfolio: {portfolioCount} items
+//                       </div>
+//                     </div>
+
+//                     {/* Action Buttons */}
+//                     {application.status === 'pending' && (
+//                       <div className="flex flex-col gap-2 ml-4">
+//                         <Button
+//                           size="sm"
+//                           onClick={() => handleViewWorkerProfile(application)}
+//                           variant="outline"
+//                           className="flex items-center gap-1"
+//                           disabled={isLoading}
+//                         >
+//                           <User className="h-3 w-3" />
+//                           {isLoading ? 'Loading...' : 'View Profile'}
+//                         </Button>
+//                         <Button
+//                           size="sm"
+//                           onClick={() => handleAcceptApplication(
+//                             application.id, 
+//                             application.worker_id,
+//                             application.worker_user_id
+//                           )}
+//                           className="flex items-center gap-1"
+//                           disabled={isLoading}
+//                         >
+//                           <Users className="h-3 w-3" />
+//                           Accept & Assign
+//                         </Button>
+//                         <Button
+//                           variant="outline"
+//                           size="sm"
+//                           className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
+//                         >
+//                           <X className="h-3 w-3" />
+//                           Reject
+//                         </Button>
+//                       </div>
+//                     )}
+//                   </div>
+//                 </Card>
+//               );
+//             })}
+//           </div>
+//         </CardContent>
+//       </Card>
+
+//       {/* Worker Profile Modal */}
+//       <WorkerPortfolioModal
+//         workerId={selectedWorker || ''}
+//         workerData={selectedWorker ? (workerProfiles.get(selectedWorker) || null) : null}
+//         isOpen={showWorkerModal}
+//         onClose={() => {
+//           setShowWorkerModal(false);
+//           setSelectedWorker(null);
+//         }}
+//         onAssign={(workerId) => {
+//           console.log('🔍 [JobDetails] Modal onAssign called with workerId:', workerId);
+          
+//           // Find the application that matches this worker
+//           const application = applications.find(app => {
+//             const appWorkerId = app.worker_user_id || app.worker_id;
+//             return appWorkerId === workerId;
+//           });
+          
+//           if (application) {
+//             console.log('✅ [JobDetails] Found matching application:', application.id);
+//             handleAcceptApplication(
+//               application.id, 
+//               application.worker_id,
+//               application.worker_user_id
+//             );
+//           } else {
+//             console.error('❌ [JobDetails] No matching application found for workerId:', workerId);
+//             toast.error('Could not find application to assign');
+//           }
+//         }}
+//         jobId={job?.id}
+//       />
+//     </>
+//   );
+// };
 
 
   // Render apply section for workers (not job owners)
