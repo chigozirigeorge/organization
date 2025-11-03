@@ -1,0 +1,21 @@
+{
+  "name": "VeriNest",
+  "short_name": "VeriNest",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0a6d4f",
+  "description": "Hire verified workers, find trusted jobs, and connect with vendors on VeriNest — Africa's trusted labor marketplace.",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
