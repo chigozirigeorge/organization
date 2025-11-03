@@ -12,3 +12,17 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://verinestorg.vercel.app/sitemap.xml
+
+# Disallow admin pages or private endpoints
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /settings/
+
+# Additional Crawl Delay for bots that stress the server
+Crawl-delay: 10

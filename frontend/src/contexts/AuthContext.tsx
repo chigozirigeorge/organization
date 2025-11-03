@@ -11,7 +11,7 @@ interface User {
   username: string;
   email_verified: boolean;
   kyc_verified: 'pending' | 'verified' | 'rejected' | 'unverified'| 'submitted' | 'approved';
-  role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'customer_care' | 'verifier' | undefined;
+  role: 'user' | 'worker' | 'employer' | 'admin' | 'moderator' | 'customer_care' | 'verifier' | 'vendor' |undefined;
   verification_status?: 'pending' | 'submitted' | 'approved' | 'rejected';
   verification_data?: any;
   wallet_created?: boolean;

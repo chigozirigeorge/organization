@@ -1,4 +1,4 @@
-// components/Dashboard.tsx - Updated with Customer Service and Chat
+// components/Dashboard.tsx - Updated with verification status improvements
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -24,7 +24,8 @@ import {
   TrendingUp, Users, Star, Shield, CreditCard, SettingsIcon, Menu, X,
   UserCheck, ShieldCheck, BarChart3, Building, ClipboardList, MessageSquare,
   DollarSign, Clock, Calendar, Award, Target, LucideIcon, HeadphonesIcon,
-  Image as ImageIcon, MessageCircle, CheckCircle
+  Image as ImageIcon, MessageCircle, CheckCircle, BadgeCheck, CircleAlert,
+  Store
 } from 'lucide-react';
 import { RoleSelection } from '@/components/RoleSelection';
 import { toast } from 'sonner';
@@ -41,6 +42,11 @@ import { CustomerServiceDashboard } from '@/components/CustomerServiceDashboard'
 import { ChatSystem } from '@/components/ChatSystem';
 import { SupportTickets } from '@/components/SupportTickets';
 import { WorkerProfile } from '@/components/WorkerProfile';
+import { VendorDashboard } from '@/components/vendor/VendorDashboard';
+import { MyServices } from '@/components/vendor/MyServices';
+import { ServiceDetails } from '@/components/vendor/ServiceDetails';
+import { PurchaseService } from '@/components/vendor/PurchaseService';
+import { VendorMarketplace } from '@/components/vendor/VendorMarketplace';
 
 // Define interfaces for better TypeScript support
 interface DashboardStat {
@@ -95,37 +101,37 @@ const Dashboard = () => {
   }
 
   const getCurrentSection = () => {
-  const path = location.pathname;
-  console.log('🔍 Dashboard Route Detection - Current path:', path);
+    const path = location.pathname;
+    console.log('🔍 Dashboard Route Detection - Current path:', path);
 
-  // Worker routes - ADD THIS
-  if (path.includes('/dashboard/workers') && !path.includes('/workers/')) return 'workers';
-  
-  // Job-related routes
-  if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
-  if (path.includes('/dashboard/jobs/create')) return 'create-job';
-  if (path.includes('/dashboard/jobs/') && path.includes('/apply')) return 'job-apply';
-  if (path.match(/\/dashboard\/jobs\/[^/]+$/)) return 'job-details';
-  if (path.includes('/dashboard/jobs/') && !path.includes('/apply')) return 'job-details';
-  
-  // Worker profile routes
-  if (path.includes('/dashboard/worker/portfolio')) return 'portfolio';
-  if (path.includes('/dashboard/worker/profile')) return 'worker-setup';
-  if (path.includes('/dashboard/workers/') && path.split('/').length === 4) return 'worker-profile';
-  
-  // Chat and Support routes
-  if (path.includes('/dashboard/chat')) return 'chat';
-  if (path.includes('/dashboard/support')) return 'support';
-  if (path.includes('/dashboard/customer-service')) return 'customer-service';
-  
-  // Other routes
-  if (path.includes('/dashboard/wallet')) return 'wallet';
-  if (path.includes('/dashboard/my-jobs')) return 'my-jobs';
-  if (path.includes('/dashboard/contracts')) return 'contracts';
-  if (path.includes('/dashboard/settings')) return 'settings';
-  
-  return 'home';
-};
+    // Worker routes
+    if (path.includes('/dashboard/workers') && !path.includes('/workers/')) return 'workers';
+    
+    // Job-related routes
+    if (path === '/dashboard/jobs' || path.includes('/dashboard/jobs/browse')) return 'jobs';
+    if (path.includes('/dashboard/jobs/create')) return 'create-job';
+    if (path.includes('/dashboard/jobs/') && path.includes('/apply')) return 'job-apply';
+    if (path.match(/\/dashboard\/jobs\/[^/]+$/)) return 'job-details';
+    if (path.includes('/dashboard/jobs/') && !path.includes('/apply')) return 'job-details';
+    
+    // Worker profile routes
+    if (path.includes('/dashboard/worker/portfolio')) return 'portfolio';
+    if (path.includes('/dashboard/worker/profile')) return 'worker-setup';
+    if (path.includes('/dashboard/workers/') && path.split('/').length === 4) return 'worker-profile';
+    
+    // Chat and Support routes
+    if (path.includes('/dashboard/chat')) return 'chat';
+    if (path.includes('/dashboard/support')) return 'support';
+    if (path.includes('/dashboard/customer-service')) return 'customer-service';
+    
+    // Other routes
+    if (path.includes('/dashboard/wallet')) return 'wallet';
+    if (path.includes('/dashboard/my-jobs')) return 'my-jobs';
+    if (path.includes('/dashboard/contracts')) return 'contracts';
+    if (path.includes('/dashboard/settings')) return 'settings';
+    
+    return 'home';
+  };
 
   const [activeSection, setActiveSection] = useState(getCurrentSection());
 
@@ -224,6 +230,16 @@ const Dashboard = () => {
   // Enhanced role-based stats with professional design
   const getRoleBasedStats = (): DashboardStat[] => {
     const baseStats: DashboardStat[] = [];
+
+    if (user.role === 'vendor' || user.role === 'employer' || user.role === 'worker') {
+      navigationItems.push({
+        id: 'vendor-dashboard',
+        label: 'Vendor Panel',
+        icon: Store,
+        description: 'Manage your services',
+        path: '/dashboard/vendor/dashboard'
+      });
+    }
     
     if (user.role === 'worker') {
       return [
@@ -420,11 +436,10 @@ const Dashboard = () => {
     }
 
     if (pathSegments[2] === 'workers' && pathSegments[3] && pathSegments.length === 4) {
-    const workerId = pathSegments[3];
-  console.log('👤 Loading worker profile for ID:', workerId);
-  return <WorkerProfile key={workerId} workerId={workerId} />;
-  }
-
+      const workerId = pathSegments[3];
+      console.log('👤 Loading worker profile for ID:', workerId);
+      return <WorkerProfile key={workerId} workerId={workerId} />;
+    }
 
     // Handle job details view
     if (activeSection === 'job-details') {
@@ -450,6 +465,26 @@ const Dashboard = () => {
     if (activeSection === 'customer-service') {
       return <CustomerServiceDashboard />;
     }
+
+    if (activeSection === 'marketplace') {
+    return <VendorMarketplace />;
+  }
+  
+  if (pathSegments[2] === 'vendor' && pathSegments[3] === 'dashboard') {
+    return <VendorDashboard />;
+  }
+  
+  if (pathSegments[2] === 'vendor' && pathSegments[3] === 'services' && !pathSegments[4]) {
+    return <MyServices />;
+  }
+  
+  if (pathSegments[2] === 'services' && pathSegments[3] && pathSegments[4] === 'purchase') {
+    return <PurchaseService />;
+  }
+  
+  if (pathSegments[2] === 'services' && pathSegments[3] && !pathSegments[4]) {
+    return <ServiceDetails />;
+  }
 
     // Always show role-specific dashboard for 'home' section
     if (activeSection === 'home') {
@@ -526,6 +561,13 @@ const Dashboard = () => {
         icon: Home,
         description: 'Main dashboard',
         path: '/dashboard'
+      },
+      {
+      id: 'marketplace',  // ADD THIS
+      label: 'Marketplace',
+      icon: Store,
+      description: 'Browse services & jobs',
+      path: '/dashboard/marketplace'
       },
       {
         id: 'wallet',
@@ -675,9 +717,12 @@ const Dashboard = () => {
   const navigationItems = getNavigationItems();
   const roleStats = getRoleBasedStats();
 
+  // Check if user is verified
+  const isUserVerified = user?.kyc_verified === 'verified';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      {/* Fixed Navbar with proper props - REMOVED DUPLICATE MENU */}
+      {/* Fixed Navbar with proper props */}
       <Navbar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} sidebarOpen={sidebarOpen} />
       
       {/* Mobile Sidebar Overlay */}
@@ -708,24 +753,26 @@ const Dashboard = () => {
                   <p className="text-xs text-slate-500 capitalize">{user.role}</p>
                 </div>
               </div>
-              {/* <Button
-                variant="ghost"
-                size="sm"
-                className="lg:hidden"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button> */}
             </div>
 
             {/* User Profile Card */}
             <div className="p-6 border-b border-slate-200/60">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-800 rounded-full flex items-center justify-center text-white font-semibold shadow-lg">
-                  {user.name?.charAt(0).toUpperCase()}
+                <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-800 rounded-full flex items-center justify-center text-white font-semibold shadow-lg">
+                    {user.name?.charAt(0).toUpperCase()}
+                  </div>
+                  {/* Blue check for verified users */}
+                  {isUserVerified && (
+                    <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white">
+                      <BadgeCheck className="h-3 w-3 text-white" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-slate-800 truncate">{user.name}</h3>
+                  <h3 className="font-semibold text-slate-800 truncate flex items-center gap-1">
+                    {user.name}
+                  </h3>
                   <p className="text-sm text-slate-500 truncate">{user.email}</p>
                   {user.username && (
                     <p className="text-xs text-slate-400 truncate">@{user.username}</p>
@@ -776,6 +823,23 @@ const Dashboard = () => {
               ))}
             </div>
 
+            {/* Verification Status above Settings */}
+            {!isUserVerified && (
+              <div className="p-4 border-t border-slate-200/60">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200"
+                  onClick={() => handleNavigation('/verify/kyc')}
+                >
+                  <CircleAlert className="h-4 w-4 mr-3" />
+                  <div className="text-left">
+                    <div className="font-medium">Not Verified</div>
+                    <div className="text-xs text-amber-500">Complete verification</div>
+                  </div>
+                </Button>
+              </div>
+            )}
+
             {/* Sidebar Footer */}
             <div className="p-4 border-t border-slate-200/60">
               <Button
@@ -811,15 +875,18 @@ const Dashboard = () => {
                 <Badge variant="secondary" className="capitalize">
                   {user.role}
                 </Badge>
-                {/* Single menu button - removed duplicate */}
-                {/* <Button
-                  variant="outline"
-                  size="sm"
-                  className="lg:hidden"
-                  onClick={() => setSidebarOpen(true)}
-                >
-                  <Menu className="h-4 w-4" />
-                </Button> */}
+                {/* Show verification status badge in header */}
+                {isUserVerified ? (
+                  <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
+                    <BadgeCheck className="h-3 w-3 mr-1" />
+                    Verified
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-amber-600 border-amber-300">
+                    <CircleAlert className="h-3 w-3 mr-1" />
+                    Not Verified
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -841,67 +908,67 @@ const Dashboard = () => {
             </Alert>
           )}
 
-          {/* KYC Verification Status */}
-          <Card className="mb-6 shadow-sm border-slate-200/60">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShieldCheck className="h-5 w-5 text-slate-600" />
-                  Identity Verification Status
-                </CardTitle>
-                <Button variant="outline" size="sm" onClick={checkKYCStatus}>
-                  Refresh Status
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-slate-600">Current Status:</span>
-                    <Badge 
-                      variant={
-                        user?.kyc_verified === 'verified' ? 'default' :
-                        user?.kyc_verified === 'pending' ? 'secondary' :
-                        user?.kyc_verified === 'rejected' ? 'destructive' :
-                        'destructive'
-                      }
-                      className="px-3 py-1"
-                    >
-                      {user?.kyc_verified === 'verified' ? 'Verified' :
-                      user?.kyc_verified === 'pending' ? 'Under Review' :
-                      user?.kyc_verified === 'rejected' ? 'Rejected' :
-                      'Not Verified'}
-                    </Badge>
+          {/* KYC Verification Status Card - Only show for unverified users */}
+          {!isUserVerified && (
+            <Card className="mb-6 shadow-sm border-slate-200/60">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ShieldCheck className="h-5 w-5 text-slate-600" />
+                    Identity Verification Status
+                  </CardTitle>
+                  <Button variant="outline" size="sm" onClick={checkKYCStatus}>
+                    Refresh Status
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-600">Current Status:</span>
+                      <Badge 
+                        variant={
+                          user?.kyc_verified === 'pending' ? 'secondary' :
+                          user?.kyc_verified === 'rejected' ? 'destructive' :
+                          'destructive'
+                        }
+                        className="px-3 py-1"
+                      >
+                        {user?.kyc_verified === 'pending' ? 'Under Review' :
+                         user?.kyc_verified === 'rejected' ? 'Rejected' :
+                         'Not Verified'}
+                      </Badge>
+                    </div>
+                    
+                    {user?.kyc_verified === 'pending' && (
+                      <p className="text-sm text-slate-500 mt-2">
+                        Verification typically takes 24-48 hours
+                      </p>
+                    )}
+                    
+                    {user?.kyc_verified === 'rejected' && (
+                      <p className="text-sm text-red-600 mt-2">
+                        Your verification was rejected. Please submit new documents.
+                      </p>
+                    )}
                   </div>
                   
-                  {user?.kyc_verified === 'pending' && (
-                    <p className="text-sm text-slate-500 mt-2">
-                      Verification typically takes 24-48 hours
-                    </p>
-                  )}
-                  
-                  {user?.kyc_verified === 'rejected' && (
-                    <p className="text-sm text-red-600 mt-2">
-                      Your verification was rejected. Please submit new documents.
-                    </p>
+                  {(user?.kyc_verified === 'unverified' || user?.kyc_verified === 'rejected') && (
+                    <Button 
+                      onClick={() => navigate('/verify/kyc')}
+                      className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg"
+                    >
+                      {user?.kyc_verified === 'rejected' ? 'Resubmit Verification' : 'Start Verification'}
+                    </Button>
                   )}
                 </div>
-                
-                {(user?.kyc_verified === 'unverified' || user?.kyc_verified === 'rejected') && (
-                  <Button 
-                    onClick={() => navigate('/verify/kyc')}
-                    className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg"
-                  >
-                    {user?.kyc_verified === 'rejected' ? 'Resubmit Verification' : 'Start Verification'}
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Limited Access Notice for Unverified Users */}
-          {(!user?.kyc_verified || user.kyc_verified === 'unverified') && user.role && (
+          {!isUserVerified && user.role && (
             <Alert className="mb-6 bg-blue-50 border-blue-200 shadow-sm">
               <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-800">
@@ -919,7 +986,7 @@ const Dashboard = () => {
 
           {/* Enhanced Stats Grid */}
           {roleStats.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {roleStats.map((stat, index) => (
                 <Card 
                   key={index} 
@@ -996,8 +1063,6 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
-{/*       
-      <Footer /> */}
     </div>
   );
 };
