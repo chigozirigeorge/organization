@@ -8,6 +8,19 @@ import { MapPin, Calendar, DollarSign, Clock, Users, TrendingUp, Briefcase, File
 import { Link } from 'react-router-dom';
 import { Job, Contract } from '../types/labour';
 
+interface DashboardResponse {
+  data?: {
+    posted_jobs: Job[];
+    active_contracts: Contract[];
+    completed_jobs: number;
+    total_spent: number;
+  };
+  posted_jobs?: Job[];
+  active_contracts?: Contract[];
+  completed_jobs?: number;
+  total_spent?: number;
+}
+
 export const EmployerDashboard = () => {
   const { token } = useAuth();
   const [stats, setStats] = useState({
@@ -24,7 +37,7 @@ export const EmployerDashboard = () => {
     fetchDashboardData();
   }, []);
 
- const fetchDashboardData = async () => {
+  const fetchDashboardData = async () => {
   try {
     const response = await fetch('https://verinest.up.railway.app/api/labour/employer/dashboard', {
       headers: {
@@ -33,7 +46,7 @@ export const EmployerDashboard = () => {
     });
 
     if (response.ok) {
-      const data = await response.json();
+      const data = await response.json() as DashboardResponse;
       console.log('📊 Employer Dashboard API Response:', data);
       
       // Handle different response structures
@@ -46,7 +59,13 @@ export const EmployerDashboard = () => {
           totalSpent: dashboardData.total_spent || 0,
         });
         setRecentJobs(dashboardData.posted_jobs || []);
-        setActiveContracts(dashboardData.active_contracts || []);
+        
+        // Process active contracts to handle missing job data
+        const processedContracts = (dashboardData.active_contracts || []).map((contract: Contract) => ({
+          ...contract,
+          job: contract.job || findJobById(dashboardData.posted_jobs, contract.job_id)
+        }));
+        setActiveContracts(processedContracts);
       } else {
         // Fallback structure
         setStats({
@@ -56,7 +75,13 @@ export const EmployerDashboard = () => {
           totalSpent: data.total_spent || 0,
         });
         setRecentJobs(data.posted_jobs || []);
-        setActiveContracts(data.active_contracts || []);
+        
+        // Process active contracts for fallback structure
+        const processedContracts = (data.active_contracts || []).map((contract: Contract) => ({
+          ...contract,
+          job: contract.job || findJobById(data.posted_jobs || [], contract.job_id)
+        }));
+        setActiveContracts(processedContracts);
       }
     } else {
       console.error('Failed to fetch employer dashboard:', response.status);
@@ -68,11 +93,62 @@ export const EmployerDashboard = () => {
   }
 };
 
+  // Helper function to find job by ID from posted_jobs array
+  const findJobById = (jobs: Job[], jobId: string): Job | undefined => {
+    return jobs?.find(job => job.id === jobId);
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN'
     }).format(amount);
+  };
+
+  // Safe contract display function
+  const renderContractInfo = (contract: Contract) => {
+    // If job data is missing, show basic contract info
+    if (!contract.job) {
+      return (
+        <div className="p-3 border rounded-lg">
+          <div className="space-y-2">
+            <p className="font-medium">Contract #{contract.id.slice(0, 8)}</p>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span>{formatCurrency(Number(contract.agreed_rate) || 0)}</span>
+              <span>{contract.agreed_timeline} days</span>
+              <Badge variant="outline">{contract.status}</Badge>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Job details not available
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Full job data available
+    return (
+      <div className="p-3 border rounded-lg">
+        <div className="space-y-2">
+          <p className="font-medium">{contract.job.title}</p>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>{formatCurrency(Number(contract.agreed_rate) || 0)}</span>
+            <span>{contract.agreed_timeline} days</span>
+            <Badge variant="outline">{contract.status}</Badge>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <Users className="h-3 w-3 mr-1" />
+              {contract.worker?.user?.name || 'Worker not specified'}
+            </div>
+            <div className="flex items-center">
+              <MapPin className="h-3 w-3 mr-1" />
+              {contract.job.location_city}, {contract.job.location_state}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -174,7 +250,7 @@ export const EmployerDashboard = () => {
                     <div className="space-y-1">
                       <p className="font-medium">{job.title}</p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{formatCurrency(job.budget)}</span>
+                        <span>{formatCurrency(Number(job.budget))}</span>
                         <span>{job.estimated_duration_days} days</span>
                         <Badge variant={
                           job.status === 'open' ? 'default' : 
@@ -213,25 +289,8 @@ export const EmployerDashboard = () => {
                 </div>
               ) : (
                 activeContracts.slice(0, 5).map((contract) => (
-                  <div key={contract.id} className="p-3 border rounded-lg">
-                    <div className="space-y-2">
-                      <p className="font-medium">{contract.job.title}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{formatCurrency(contract.agreed_rate)}</span>
-                        <span>{contract.agreed_timeline} days</span>
-                        <Badge variant="outline">{contract.status}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center">
-                          <Users className="h-3 w-3 mr-1" />
-                          {contract.worker.user.name}
-                        </div>
-                        <div className="flex items-center">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {contract.job.location_city}, {contract.job.location_state}
-                        </div>
-                      </div>
-                    </div>
+                  <div key={contract.id}>
+                    {renderContractInfo(contract)}
                   </div>
                 ))
               )}

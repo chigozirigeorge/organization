@@ -29,6 +29,7 @@ import { Careers } from './components/Careers';
 import { PressKit } from './components/PressKit';
 import { Blog } from './components/Blog';
 import { KYCFlow } from './components/KYCFlow';
+import { ProfessionalKYCFlow } from './components/kyc/ProfessionalKYCFlow';
 import { RoleSelection } from './components/RoleSelection';
 import { Settings } from './components/Settings';
 import { TransactionsPage } from './components/TransactionsPage';
@@ -80,7 +81,7 @@ const AppRoutes = () => {
       {/* KYC Verification Flow */}
       <Route path="/verify/kyc" element={
         <ProtectedRoute>
-          <KYCFlow />
+          <ProfessionalKYCFlow />
         </ProtectedRoute>
       } />
       

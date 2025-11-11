@@ -1,7 +1,7 @@
 // components/Dashboard.tsx - Updated with verification status improvements
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
@@ -36,7 +36,6 @@ import { AdminDashboard } from '@/components/AdminDashboard';
 import { WorkerPortfolio } from '@/components/WorkerPortfolio';
 import { WorkersList } from '@/components/WorkersList';
 import { JobDetails } from '@/components/JobDetails';
-import { JobApplication } from '@/components/JobApplication';
 import { CreateJobApplication } from '@/components/CreateJobApplication';
 import { CustomerServiceDashboard } from '@/components/CustomerServiceDashboard';
 import { ChatSystem } from '@/components/ChatSystem';
@@ -72,6 +71,7 @@ const Dashboard = () => {
   const { user, token, isAuthenticated, refreshUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const jobIdFromUrl = location.pathname.split('/jobs/')[1]?.split('/')[0];
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashboardStats, setDashboardStats] = useState({
@@ -443,8 +443,25 @@ const Dashboard = () => {
 
     // Handle job details view
     if (activeSection === 'job-details') {
-      return <JobDetails key={jobId}/>;
+      const pathSegments = location.pathname.split('/');
+      const jobIdFromUrl = pathSegments[3]; // Get jobId from URL
+      console.log('🎯 Loading JobDetails with jobId from URL:', jobIdFromUrl);
+      
+      if (!jobIdFromUrl) {
+        console.error('❌ No jobId found in URL');
+        return (
+          <div className="text-center py-8">
+            <h2 className="text-2xl font-bold mb-4">Invalid Job</h2>
+            <p className="text-muted-foreground">No job ID provided in the URL.</p>
+            <Button onClick={() => navigate('/dashboard/jobs')}>
+              Back to Jobs
+            </Button>
+          </div>
+        );
     }
+  
+  return <JobDetails jobId={jobIdFromUrl} key={jobIdFromUrl} />;
+}
 
     // Handle job application view
     if (activeSection === 'job-apply') {
@@ -532,7 +549,7 @@ const Dashboard = () => {
         return <WorkersList />;
       default:
         if (location.pathname.includes('/dashboard/jobs/') && !location.pathname.includes('/apply')) {
-          return <JobDetails />;
+          return <JobDetails jobId={jobIdFromUrl} key={jobIdFromUrl} />;
         }
         // Fallback to role-specific dashboard
         switch (user.role) {
