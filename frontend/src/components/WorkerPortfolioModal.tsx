@@ -11,7 +11,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { CompleteWorkerData } from '../utils/workerUtils';
+import { CompleteWorkerData, WorkerUser, WorkerProfile } from '../utils/workerUtils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,6 +35,21 @@ interface PortfolioItem {
   category?: string;
   worker_id?: string;
 }
+
+interface Review {
+  id?: string;
+  reviewer?: {
+    name?: string;
+  };
+  rating: number;
+  comment: string;
+  created_at?: string;
+}
+
+// Safe access helper functions
+const safeGet = <T,>(obj: any, path: string, defaultValue: T): T => {
+  return path.split('.').reduce((acc, part) => acc && acc[part], obj) || defaultValue;
+};
 
 export const WorkerPortfolioModal = ({
   workerId,
@@ -71,45 +86,70 @@ export const WorkerPortfolioModal = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-NG', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    if (!dateString) return 'Date not available';
+    try {
+      return new Date(dateString).toLocaleDateString('en-NG', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Invalid date';
+    }
   };
 
-  // Safe portfolio data extraction - FIXED VERSION
+  // Safe portfolio data extraction - IMPROVED VERSION
   const getPortfolioItems = (): PortfolioItem[] => {
     if (!workerData) return [];
     
     console.log('🔄 [getPortfolioItems] Processing worker data:', workerData);
     
     try {
-      // Handle different possible portfolio data structures
       let portfolioData = workerData.portfolio;
       
-      // If portfolio is nested in data property
+      // Handle different possible portfolio data structures
       if (portfolioData && typeof portfolioData === 'object' && 'data' in portfolioData) {
         portfolioData = (portfolioData as any).data;
       }
       
+      // If portfolio is nested in a response structure
+      if (portfolioData && typeof portfolioData === 'object' && 'portfolio' in portfolioData) {
+        portfolioData = (portfolioData as any).portfolio;
+      }
+      
       if (Array.isArray(portfolioData)) {
-        const items = portfolioData.map((item, index) => {
-          console.log(`🎨 [Portfolio Item ${index}]:`, item);
-          return {
-            id: item.id || `portfolio-${index}-${Math.random()}`,
-            title: item.title || 'Untitled Project',
-            description: item.description || 'No description available.',
-            image_url: item.image_url || '',
-            project_date: item.project_date || item.created_at || new Date().toISOString(),
-            created_at: item.created_at,
-            category: item.category,
-            worker_id: item.worker_id
-          };
-        });
+        const items = portfolioData
+          .filter(item => item && typeof item === 'object')
+          .map((item, index) => {
+            console.log(`🎨 [Portfolio Item ${index}]:`, item);
+            return {
+              id: item.id || `portfolio-${index}-${Math.random().toString(36).substr(2, 9)}`,
+              title: item.title || 'Untitled Project',
+              description: item.description || 'No description available.',
+              image_url: item.image_url || item.image_urls?.[0] || '',
+              project_date: item.project_date || item.created_at || new Date().toISOString(),
+              created_at: item.created_at,
+              category: item.category,
+              worker_id: item.worker_id
+            };
+          });
         
         console.log('✅ [getPortfolioItems] Processed portfolio items:', items);
         return items;
+      }
+      
+      // If portfolio is directly in workerData as an array
+      if (Array.isArray(workerData.portfolio)) {
+        return workerData.portfolio.map((item, index) => ({
+          id: item.id || `portfolio-${index}-${Math.random().toString(36).substr(2, 9)}`,
+          title: item.title || 'Untitled Project',
+          description: item.description || 'No description available.',
+          image_url: item.image_url || '',
+          project_date: item.project_date || item.created_at || new Date().toISOString(),
+          created_at: item.created_at,
+          category: item.category,
+          worker_id: item.worker_id
+        }));
       }
       
       console.log('❌ [getPortfolioItems] Portfolio data is not an array:', portfolioData);
@@ -121,15 +161,22 @@ export const WorkerPortfolioModal = ({
   };
 
   const portfolioItems = getPortfolioItems();
-  const reviews = workerData?.reviews || [];
-  const profile = workerData?.profile || {};
-  const workerUser = workerData?.user || {};
+  
+  // Safe access to nested data
+  const reviews: Review[] = Array.isArray(workerData?.reviews) ? workerData.reviews : [];
+  const profile: Partial<WorkerProfile> = workerData?.profile || {};
+  const workerUser: Partial<WorkerUser> = workerData?.user || {};
 
   console.log('📋 [WorkerPortfolioModal] Final portfolio items:', portfolioItems);
 
   const handleStartChat = async () => {
     if (!user || user.role !== 'employer') {
       alert('Only employers can start chats with workers');
+      return;
+    }
+
+    if (!workerUser.id) {
+      toast.error('Cannot start chat: Missing worker user ID');
       return;
     }
   
@@ -153,7 +200,13 @@ export const WorkerPortfolioModal = ({
       workerUserId: workerUser?.id,
       jobId
     });
-    onAssign(workerId);
+    
+    if (!workerUser?.id) {
+      toast.error('Cannot assign worker: Missing user ID');
+      return;
+    }
+    
+    onAssign(workerUser.id); // Use user ID for assignment
   };
 
   if (!workerData) {
@@ -203,7 +256,7 @@ export const WorkerPortfolioModal = ({
                   <CardContent className="p-6">
                     <div className="flex flex-col items-center text-center space-y-4">
                       <div className="w-24 h-24 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                        {workerUser?.name?.charAt(0).toUpperCase() || 'W'}
+                        {workerUser?.name?.charAt(0)?.toUpperCase() || 'W'}
                       </div>
                       <div>
                         <h3 className="font-bold text-xl">{workerUser?.name || 'Unknown'}</h3>
@@ -214,7 +267,7 @@ export const WorkerPortfolioModal = ({
                         {profile?.is_available ? 'Available for Work' : 'Not Available'}
                       </Badge>
 
-                      {workerUser?.trust_score && (
+                      {workerUser?.trust_score !== undefined && (
                         <div className="flex items-center gap-2">
                           <Award className="h-4 w-4 text-emerald-600" />
                           <span className="font-semibold">Trust Score: {workerUser.trust_score}%</span>
@@ -257,7 +310,7 @@ export const WorkerPortfolioModal = ({
                         <span>Work Location</span>
                       </div>
                       <p className="font-medium text-lg">
-                        {profile?.location_city}, {profile?.location_state}
+                        {profile?.location_city || 'Unknown'}, {profile?.location_state || 'Unknown'}
                       </p>
                     </div>
                   </CardContent>
@@ -328,7 +381,7 @@ export const WorkerPortfolioModal = ({
                       <div>
                         <h4 className="font-semibold text-lg mb-3">Skills & Expertise</h4>
                         <div className="flex flex-wrap gap-2">
-                          {profile.skills.map((skill, index) => (
+                          {profile.skills.map((skill: string, index: number) => (
                             <Badge key={index} variant="outline" className="text-sm">
                               {skill}
                             </Badge>
@@ -341,7 +394,7 @@ export const WorkerPortfolioModal = ({
                     <div className="grid grid-cols-2 gap-6 pt-4 border-t">
                       <div className="text-center p-4 bg-yellow-50 rounded-lg">
                         <p className="text-3xl font-bold text-yellow-600">
-                          {profile?.rating?.toFixed(1) || '0.0'}
+                          {(profile?.rating || 0).toFixed(1)}
                         </p>
                         <div className="flex justify-center my-2">
                           {[1, 2, 3, 4, 5].map((star) => (
@@ -375,9 +428,10 @@ export const WorkerPortfolioModal = ({
                         onClick={handleAssignWorker}
                         className="flex-1 gap-2 py-3 text-lg"
                         size="lg"
+                        disabled={!profile?.is_available}
                       >
                         <Users className="h-5 w-5" />
-                        Assign to Job
+                        {profile?.is_available ? 'Assign to Job' : 'Not Available'}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -390,7 +444,10 @@ export const WorkerPortfolioModal = ({
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground mt-3 text-center">
-                      Assigning this worker will create a contract and escrow for the job. Review their portfolio below before making a decision.
+                      {profile?.is_available 
+                        ? 'Assigning this worker will create a contract and escrow for the job. Review their portfolio below before making a decision.'
+                        : 'This worker is currently not available for new assignments.'
+                      }
                     </p>
                   </CardContent>
                 </Card>
@@ -398,7 +455,7 @@ export const WorkerPortfolioModal = ({
             </div>
           </TabsContent>
 
-          {/* Portfolio Tab - COMPLETELY REWRITTEN */}
+          {/* Portfolio Tab */}
           <TabsContent value="portfolio" className="space-y-6">
             <Card>
               <CardHeader>
@@ -418,7 +475,7 @@ export const WorkerPortfolioModal = ({
                   <div className="space-y-6">
                     {/* Portfolio Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {portfolioItems.map((item, index) => (
+                      {portfolioItems.map((item) => (
                         <Card 
                           key={item.id} 
                           className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20 overflow-hidden"
@@ -433,20 +490,20 @@ export const WorkerPortfolioModal = ({
                                   className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                                   onError={(e) => {
                                     console.error('❌ Image failed to load:', item.image_url);
-                                    // Hide the image and show fallback
                                     e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                       const fallback = document.createElement('div');
                                       fallback.className = 'w-full h-48 bg-gradient-to-br from-gray-200 to-gray-300 flex flex-col items-center justify-center text-gray-500';
                                       fallback.innerHTML = `
-                                        <ImageIcon class="h-12 w-12 mb-2 opacity-50" />
+                                        <svg class="h-12 w-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                        </svg>
                                         <span class="text-sm">Image not available</span>
                                       `;
                                       parent.appendChild(fallback);
                                     }
                                   }}
-                                  onLoad={() => console.log('✅ Image loaded successfully:', item.image_url)}
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
                               </>

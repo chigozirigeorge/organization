@@ -18,6 +18,16 @@ interface User {
   transaction_pin: number;
   bank_account_linked?: boolean;
   profile_completed?: boolean;
+  phone?: number;
+  address?: string;
+
+  subscription_tier?: 'basic' | 'premium';
+  role_change_count?: number;
+  role_change_reset_at?: string;
+  
+  // Helper methods for frontend
+  has_premium_subscription?: () => boolean;
+  get_monthly_role_changes?: () => number;
   
   // Backend fields
   verified?: boolean;

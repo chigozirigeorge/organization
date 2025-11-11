@@ -20,6 +20,12 @@ export const Settings = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [showChangePin, setShowChangePin] = useState(false);
+  const [usernameData, setUsernameData] = useState({
+  new_username: user?.username || '',
+  });
+
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   
   // Profile state
   const [profileData, setProfileData] = useState({
@@ -60,6 +66,70 @@ export const Settings = () => {
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check username availability
+const checkUsernameAvailability = async (username: string) => {
+  if (username.length < 3) {
+    setUsernameAvailable(false);
+    return;
+  }
+
+  if (username === user?.username) {
+    setUsernameAvailable(true);
+    return;
+  }
+
+  setCheckingUsername(true);
+  try {
+    const response = await fetch(`https://verinest.up.railway.app/api/users/check-username?username=${encodeURIComponent(username)}`);
+    if (response.ok) {
+      const data = await response.json();
+      setUsernameAvailable(data.available);
+    }
+  } catch (error) {
+    console.error('Error checking username:', error);
+  } finally {
+    setCheckingUsername(false);
+  }
+};
+
+  // Update username
+  const handleUsernameUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!usernameAvailable) {
+      toast.error('Please choose an available username');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('https://verinest.up.railway.app/api/users/username', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: usernameData.new_username,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Username updated successfully!');
+        await refreshUser();
+        setUsernameAvailable(null);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update username');
+      }
+    } catch (error: any) {
+      console.error('Error updating username:', error);
+      toast.error(error.message || 'Failed to update username');
     } finally {
       setLoading(false);
     }
@@ -192,14 +262,37 @@ export const Settings = () => {
                     
                     <div className="space-y-2">
                       <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        value={profileData.username}
-                        disabled
-                        className="bg-muted"
-                        placeholder="Your username"
-                      />
-                      <p className="text-xs text-muted-foreground">Username cannot be changed</p>
+                      <div className="space-y-2">
+                        <Input
+                          id="username"
+                          value={usernameData.new_username}
+                          onChange={(e) => {
+                            const newUsername = e.target.value.toLowerCase();
+                            setUsernameData({ new_username: newUsername });
+                            checkUsernameAvailability(newUsername);
+                          }}
+                          placeholder="Choose a username"
+                        />
+                        {usernameData.new_username !== user?.username && (
+                          <div className="flex items-center gap-2 text-sm">
+                            {checkingUsername ? (
+                              <span className="text-blue-600">Checking availability...</span>
+                            ) : usernameAvailable === true ? (
+                              <span className="text-green-600">✓ Username available</span>
+                            ) : usernameAvailable === false ? (
+                              <span className="text-red-600">✗ Username not available</span>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                      <Button 
+                        type="button" 
+                        onClick={handleUsernameUpdate}
+                        disabled={!usernameAvailable || usernameData.new_username === user?.username || loading}
+                        size="sm"
+                      >
+                        Update Username
+                      </Button>
                     </div>
                   </div>
 
@@ -280,6 +373,51 @@ export const Settings = () => {
                         </Badge>
                         </div>
                     </div>
+
+                     <div className="space-y-2">
+                    <Label htmlFor="referral_code">Referral Code</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="referral_code"
+                        value={user?.referral_code || ''}
+                        disabled
+                        className="bg-muted flex-1"
+                        placeholder="Your referral code"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (user?.referral_code) {
+                            navigator.clipboard.writeText(user.referral_code);
+                            toast.success('Referral code copied to clipboard!');
+                          }
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Share this code with friends to earn rewards
+                    </p>
+                  </div>
+
+                  {/* Add referral stats if available */}
+                  {user?.referral_count !== undefined && (
+                    <div className="space-y-2">
+                      <Label>Referral Stats</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-sm text-muted-foreground">Total Referrals</p>
+                          <p className="text-2xl font-bold">{user.referral_count || 0}</p>
+                        </div>
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-sm text-muted-foreground">Points Earned</p>
+                          <p className="text-2xl font-bold">{user.trust_score || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                     </div>
                 </CardContent>
                 </Card>
