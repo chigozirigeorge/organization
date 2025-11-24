@@ -6,19 +6,19 @@ export const AboutUs = () => {
   const teamMembers = [
     {
       name: "David George Chigoziri",
-      role: "Founder & CEO",
+      role: "Founder & Backend Dev",
       description: "Former tech lead with passion for empowering local talent"
     },
     {
-      name: "Amina Yusuf",
-      role: "Head of Operations",
+      name: "Jessica Mbah",
+      role: "Co-Founder & Head of Operations",
       description: "Experienced in marketplace operations and user experience"
     },
     {
-      name: "David Okafor",
+      name: "Lucky Abuvfe",
       role: "CTO",
       description: "Full-stack developer focused on secure, scalable systems"
-    },
+    }
     {
       name: "Grace Chukwu",
       role: "Community Manager",
