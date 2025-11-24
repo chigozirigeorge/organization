@@ -18,7 +18,7 @@ export const AboutUs = () => {
       name: "Lucky Abuvfe",
       role: "CTO",
       description: "Full-stack developer focused on secure, scalable systems"
-    }
+    },
     {
       name: "Grace Chukwu",
       role: "Community Manager",
