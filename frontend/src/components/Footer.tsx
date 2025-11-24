@@ -126,6 +126,7 @@ export const Footer = () => {
                   <motion.a
                     key={social.href}
                     href={social.href}
+                    target='_blank'
                     className="text-muted-foreground hover:text-primary transition-colors"
                     whileHover={{ scale: 1.2, y: -2 }}
                     whileTap={{ scale: 0.9 }}
