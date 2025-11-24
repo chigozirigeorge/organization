@@ -1,15 +1,12 @@
 {
   "routes": [
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/auth/callback",
-      "dest": "/index.html"
+      "src": "/sitemap\\.xml",
+      "dest": "/sitemap.xml"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/"
     }
   ]
 }
