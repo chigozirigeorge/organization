@@ -1,10 +1,12 @@
 {
-  "rewrites": [
-    { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
-    { "source": "/(.*)", "destination": "/" }
-  ],
-  "staticFiles": {
-    "destination": "/",
-    "source": "public"
-  }
+  "routes": [
+    {
+      "src": "/sitemap\\.xml",
+      "dest": "/sitemap.xml"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
 }
