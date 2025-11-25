@@ -2,12 +2,7 @@
   "routes": [
     {
       "src": "^/sitemap\\.xml$",
-      "headers": { "Cache-Control": "no-cache" },
       "dest": "/sitemap.xml"
-    },
-    {
-      "src": "^/(.*)$",
-      "dest": "/"
     }
   ]
 }
