@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Alert, AlertDescription } from './ui/alert';
 import { CheckCircle, Camera, FileText, UserCheck, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { TermsAndConditions } from './TermsAndConditions';
-import { PrivacyPolicy } from './PrivacyPolicy';
-import { DocumentUpload } from './DocumentUpload';
+import { TermsAndConditions } from './Landingpage/TermsAndConditions';
+import { PrivacyPolicy } from './Landingpage/PrivacyPolicy';
+import { DocumentUpload } from './shared/DocumentUpload';
 import { FacialVerification } from './FacialVerification';
 import { LocationVerification } from './LocationVerification';
-import { PersonalInformation } from './PersonalInformation';
+import { PersonalInformation } from './shared/PersonalInformation';
 
 type KYCStep = 'terms' | 'privacy' | 'document' | 'personal' | 'facial' | 'location' | 'complete';
 

@@ -6,7 +6,7 @@ export const AboutUs = () => {
   const teamMembers = [
     {
       name: "David George Chigoziri",
-      role: "Founder & CEO",
+      role: "Founder & Backend Dev",
       description: "Former tech lead with passion for empowering local talent"
     },
     {

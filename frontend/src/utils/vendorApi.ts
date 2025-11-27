@@ -10,7 +10,7 @@ import {
   ServiceOrder 
 } from '../types/vendor.types';
 
-const API_BASE = 'https://verinest.up.railway.app/api';
+const API_BASE = 'https://api.verinest.xyz/api';
 
 export const vendorApi = {
   // Vendor Profile Management

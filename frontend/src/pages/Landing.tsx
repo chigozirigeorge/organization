@@ -1,9 +1,9 @@
-import { Navbar } from '../components/Navbar';
-import { HeroSection } from '../components/HeroSection';
-import { FeatureGrid } from '../components/FeatureGrid';
-import { HowItWorksSection } from '../components/HowItWorksSection';
-import { CallToAction } from '../components/CallToAction';
-import { Footer } from '../components/Footer';
+import { Navbar } from '../components/Landingpage/Navbar';
+import { HeroSection } from '../components/Landingpage/HeroSection';
+import { FeatureGrid } from '../components/Landingpage/FeatureGrid';
+import { HowItWorksSection } from '../components/Landingpage/HowItWorksSection';
+import { CallToAction } from '../components/Landingpage/CallToAction';
+import { Footer } from '../components/Landingpage/Footer';
 
 const Landing = () => {
   return (

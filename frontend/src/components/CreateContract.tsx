@@ -42,6 +42,16 @@ Both parties agree to these terms and conditions.`
     setLoading(true);
 
     try {
+      if (!token) {
+        toast.error('You must be logged in to create a contract');
+        setLoading(false);
+        return;
+      }
+      if (!application.worker && !application.worker_id) {
+        toast.error('Worker information is missing for this application');
+        setLoading(false);
+        return;
+      }
       const response = await fetch(`https://verinest.up.railway.app/api/labour/jobs/${job.id}/contract`, {
         method: 'POST',
         headers: {
@@ -49,7 +59,7 @@ Both parties agree to these terms and conditions.`
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          worker_id: application.worker.id,
+          worker_id: application.worker?.id || (application as any).worker_id,
           agreed_rate: parseFloat(formData.agreed_rate),
           agreed_timeline: parseInt(formData.agreed_timeline),
           terms: formData.terms,
@@ -75,7 +85,7 @@ Both parties agree to these terms and conditions.`
       <CardHeader>
         <CardTitle>Create Contract</CardTitle>
         <CardDescription>
-          Create a contract for {application.worker.user.name}
+          Create a contract for {application.worker?.name || (application as any).worker_id || 'Selected worker'}
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -7,8 +7,19 @@ interface ApiHeaders {
   [key: string]: string | undefined;
 }
 
+class ApiError extends Error {
+  status: number;
+  body: any;
+  constructor(message: string, status: number, body: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 class ApiClient {
-  private baseURL = 'https://verinest.up.railway.app/api';
+  private baseURL = 'https://api.verinest.xyz/api';
   private token: string | null = null;
 
   constructor() {
@@ -49,18 +60,47 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const contentType = response.headers.get('content-type') || '';
+        let errorData: any = {};
+        if (contentType.includes('application/json')) {
+          errorData = await response.json().catch(() => ({}));
+        } else {
+          const text = await response.text().catch(() => '');
+          errorData = { message: text };
+        }
+
         const errorMessage = errorData.message || `Request failed with status ${response.status}`;
-        
+
         // Don't show toast for authentication errors (handled above)
         if (response.status !== 401) {
           toast.error(errorMessage);
         }
-        
-        throw new Error(errorMessage);
+
+        throw new ApiError(errorMessage, response.status, errorData);
       }
 
-      return await response.json();
+      // Parse body safely and normalize response shape.
+      const contentType = response.headers.get('content-type') || '';
+      let body: any = {};
+      if (contentType.includes('application/json')) {
+        try {
+          body = await response.json();
+        } catch (e) {
+          body = {};
+        }
+      } else {
+        try {
+          const text = await response.text();
+          body = { message: text };
+        } catch (e) {
+          body = {};
+        }
+      }
+
+      // Normalize: prefer { data: ... } wrapper but fall back to raw body
+      const normalized = body && typeof body === 'object' && 'data' in body ? body.data : body;
+      console.log('API response', { url, status: response.status, body: normalized });
+      return normalized;
     } catch (error: any) {
       // Don't re-throw authentication errors (they're handled above)
       if (error.message !== 'Authentication required' && !error.message.includes('Failed to fetch')) {
@@ -77,14 +117,22 @@ class ApiClient {
   async post(endpoint: string, data?: any) {
     return this.request(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
+      // Allow passing a pre-serialized JSON string to avoid double-stringify
+      body: typeof data === 'string' ? data : JSON.stringify(data),
     });
   }
 
   async put(endpoint: string, data?: any) {
     return this.request(endpoint, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: typeof data === 'string' ? data : JSON.stringify(data),
+    });
+  }
+
+  async patch(endpoint: string, data?: any) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: typeof data === 'string' ? data : JSON.stringify(data),
     });
   }
 
