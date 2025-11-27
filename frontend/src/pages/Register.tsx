@@ -10,52 +10,91 @@ import { Checkbox } from '../components/ui/checkbox';
 import logo from '../assets/verinest.png';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { CheckCircle, ExternalLink, ArrowLeft } from 'lucide-react';
+import { CheckCircle, ExternalLink, ArrowLeft, Mail, User, Lock, Shield, Eye, EyeOff, Sparkles, Zap, Crown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { PrivacyPolicy } from '../components/PrivacyPolicy';
-import { TermsAndConditions } from '../components/TermsAndConditions';
-import { OAuthPopup } from '../components/OAuthPopup';
+import { PrivacyPolicy } from '../components/Landingpage/PrivacyPolicy';
+import { TermsAndConditions } from '../components/Landingpage/TermsAndConditions';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const Register = () => {
   const { register, loginWithOAuth } = useAuth();
+  // Get referral code from URL if present
+  const urlParams = new URLSearchParams(window.location.search);
+  const referralFromUrl = urlParams.get('ref') || '';
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
     password: '',
     passwordConfirm: '',
-    referral_code: '',
+    referral_code: referralFromUrl,
+    role: '', // Add role to form data
   });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [activeModal, setActiveModal] = useState<'privacy' | 'terms' | null>(null);
-  const [showOAuthPopup, setShowOAuthPopup] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [showTermsFirst, setShowTermsFirst] = useState(true); // New state to show terms first
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'worker' | 'employer' | 'vendor' | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleOAuthLogin = (provider: 'google') => {
+  // Enhanced OAuth handlers with role selection
+  const handleOAuthLogin = async (provider: 'google' | 'twitter') => {
+    if (!selectedRole) {
+      toast.error('Please select your role first');
+      return;
+    }
+    
     setOauthError(null);
-    setShowOAuthPopup(true);
-    loginWithOAuth(provider);
+    setOauthLoading(provider);
+    
+    try {
+      if (provider === 'google') {
+        // Use existing OAuth implementation
+        loginWithOAuth('google');
+      } else if (provider === 'twitter') {
+        // Demo Twitter/X OAuth - in production, this would connect to actual Twitter/X OAuth
+        await handleTwitterOAuth();
+      }
+    } catch (error: any) {
+      setOauthError(error.message || `${provider} authentication failed`);
+      setOauthLoading(null);
+      setTimeout(() => setOauthError(null), 5000);
+    }
   };
 
-  const handleOAuthSuccess = () => {
-    setShowOAuthPopup(false);
-    // Navigation is handled by the AuthContext
-  };
-
-  const handleOAuthError = (error: string) => {
-    setOauthError(error);
-    setShowOAuthPopup(false);
-    setTimeout(() => setOauthError(null), 5000);
-  };
-
-  const handleAcceptTerms = () => {
-    setAcceptedTerms(true);
-    setShowTermsFirst(false);
+  // Demo Twitter/X OAuth implementation
+  const handleTwitterOAuth = async () => {
+    // Simulate OAuth flow for demo purposes
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        // Simulate successful OAuth
+        const mockUserData = {
+          name: 'Demo User',
+          username: 'demo_user',
+          email: 'demo@twitter.com',
+          provider: 'twitter'
+        };
+        
+        // In real implementation, this would exchange OAuth code for tokens
+        // For demo, we'll show success and redirect to register with prefilled data
+        setOauthLoading(null);
+        setFormData({
+          ...formData,
+          name: mockUserData.name,
+          username: mockUserData.username,
+          email: mockUserData.email,
+          role: selectedRole || '', // Include selected role
+        });
+        setShowEmailForm(true);
+        toast.success('Twitter/X connected! Please complete your registration.');
+        resolve(mockUserData);
+      }, 2000);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,8 +105,16 @@ const Register = () => {
       return;
     }
     
+    if (!formData.role) {
+      toast.error('Please select your role');
+      return;
+    }
+    
     setLoading(true);
     try {
+      // Store role in sessionStorage for post-registration redirect
+      sessionStorage.setItem('selectedRole', formData.role);
+      
       const cleanData = {
         ...formData,
         referral_code: formData.referral_code.trim() !== '' ? formData.referral_code : undefined
@@ -96,6 +143,8 @@ const Register = () => {
   };
 
   if (registered) {
+    const storedRole = sessionStorage.getItem('selectedRole');
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -113,6 +162,11 @@ const Register = () => {
               <AlertDescription className="text-blue-800">
                 We've sent a verification link to <strong>{formData.email}</strong>. 
                 Check your inbox and click the link to verify your account.
+                {storedRole && (
+                  <span className="block mt-2 text-sm">
+                    After verification, you'll be redirected to complete your {storedRole} profile.
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
             
@@ -138,375 +192,535 @@ const Register = () => {
                 Go to Verification Page
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Terms First Screen
-  if (showTermsFirst) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardHeader className="space-y-4">
-            <div className="flex justify-center">
-              <img src={logo} alt="VeriNest" className="h-16 w-auto" />
-            </div>
-            <CardTitle className="text-2xl text-center">Welcome to VeriNest</CardTitle>
-            <CardDescription className="text-center">
-              Please review and accept our terms to continue
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Terms Summary */}
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-900 mb-2">Before you continue...</h3>
-                <p className="text-blue-800 text-sm">
-                  To create your VeriNest account, you need to agree to our Terms and Conditions and Privacy Policy. 
-                  These documents explain how we handle your data and what you can expect from our platform.
+            
+            {/* Role-specific next steps */}
+            {storedRole && (
+              <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-600 text-center">
+                  <strong>Next Steps:</strong> After verification, you'll be able to:
+                  {storedRole === 'worker' && (
+                    <span className="block mt-1">• Create your worker profile • Add portfolio • Set availability</span>
+                  )}
+                  {storedRole === 'employer' && (
+                    <span className="block mt-1">• Post jobs • Manage applications • Handle payments</span>
+                  )}
+                  {storedRole === 'vendor' && (
+                    <span className="block mt-1">• List services • Manage subscriptions • Track analytics</span>
+                  )}
                 </p>
               </div>
-
-              {/* Quick Terms Highlights */}
-              <div className="grid gap-3 text-sm">
-                <div className="flex items-start space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                  <span>We protect your personal information</span>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                  <span>Your data is encrypted and secure</span>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                  <span>Transparent about how we use your information</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Terms Agreement */}
-            <div className="space-y-4 border-t pt-4">
-              <div className="flex items-start space-x-2">
-                <Checkbox
-                  id="initial-terms"
-                  checked={acceptedTerms}
-                  onCheckedChange={(checked) => setAcceptedTerms(checked as boolean)}
-                  className="mt-1"
-                />
-                <Label htmlFor="initial-terms" className="text-sm leading-relaxed">
-                  I have read and agree to the{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('terms')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Terms and Conditions
-                  </button>{' '}
-                  and{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('privacy')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Privacy Policy
-                  </button>
-                </Label>
-              </div>
-
-              {/* Quick Links */}
-              <div className="flex justify-center gap-6 text-xs text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('terms')}
-                  className="flex items-center hover:text-primary transition-colors"
-                >
-                  Read Full Terms <ExternalLink className="h-3 w-3 ml-1" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('privacy')}
-                  className="flex items-center hover:text-primary transition-colors"
-                >
-                  Privacy Policy <ExternalLink className="h-3 w-3 ml-1" />
-                </button>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              <Button 
-                className="w-full" 
-                onClick={handleAcceptTerms}
-                disabled={!acceptedTerms}
-              >
-                Accept & Continue
-              </Button>
-              
-              <div className="text-center text-sm text-muted-foreground">
-                By continuing, you agree to create a VeriNest account
-              </div>
-            </div>
-
-            <div className="text-center text-xs text-muted-foreground">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline">
-                Login here
-              </Link>
-            </div>
+            )}
           </CardContent>
         </Card>
-
-        {/* Legal Modals */}
-        <Dialog open={!!activeModal} onOpenChange={() => setActiveModal(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle>
-                {activeModal === 'privacy' ? 'Privacy Policy' : 'Terms and Conditions'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="overflow-y-auto max-h-[70vh]">
-              {activeModal === 'privacy' ? <PrivacyPolicy /> : <TermsAndConditions />}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setActiveModal(null)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     );
   }
 
-  // Main Registration Screen (after accepting terms)
+  // Main Registration Screen
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowTermsFirst(true)}
-                className="p-0 h-auto"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back
-              </Button>
-              <div className="flex justify-center flex-1">
-                <img src={logo} alt="VeriNest" className="h-12 w-auto" />
-              </div>
-              <div className="w-10"></div> {/* Spacer for balance */}
-            </div>
-            <CardTitle className="text-2xl text-center">Create Account</CardTitle>
-            <CardDescription className="text-center">
-              Choose your preferred sign up method
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* OAuth Section - Primary Registration Method */}
-            {!showEmailForm && (
-              <div className="space-y-4">
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => handleOAuthLogin('google')}
-                  disabled={loading}
-                >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                  Continue with Google
-                </Button>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute inset-0 bg-grid-slate-200/50 bg-[size:60px_60px]"></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-primary/20 to-transparent rounded-full blur-3xl"></div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-4xl relative z-10"
+        >
+          <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-xl">
+            <CardContent className="p-0">
+              <div className="grid md:grid-cols-2">
+                {/* Left Side - Welcome Section */}
+                <div className="hidden md:flex flex-col justify-center p-12 bg-gradient-to-br from-primary to-primary/80 text-white relative overflow-hidden">
+                  <div className="absolute inset-0 bg-black/10"></div>
+                  <div className="relative z-10 space-y-8">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="text-center"
+                    >
+                      <div className="mx-auto w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-sm">
+                        <Sparkles className="w-10 h-10" />
+                      </div>
+                      <h1 className="text-4xl font-bold mb-4">Join VeriNest</h1>
+                      <p className="text-xl text-white/90 mb-8">
+                        Connect with trusted professionals and grow your career
+                      </p>
+                    </motion.div>
+                    
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                          <Shield className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg">Secure Platform</h3>
+                          <p className="text-white/80 text-sm">Escrow-protected payments</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                          <Zap className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg">Quick Verification</h3>
+                          <p className="text-white/80 text-sm">Get verified in minutes</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                          <Crown className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg">Premium Support</h3>
+                          <p className="text-white/80 text-sm">24/7 customer assistance</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                    
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.4 }}
+                      className="text-center pt-8"
+                    >
+                      <p className="text-white/70 text-sm mb-2">Already have an account?</p>
+                      <Link 
+                        to="/login"
+                        className="inline-flex items-center text-white hover:text-white/90 transition-colors font-medium"
+                      >
+                        Sign in here
+                        <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
+                      </Link>
+                    </motion.div>
+                  </div>
+                </div>
                 
-                {oauthError && (
-                  <div className="text-sm text-red-600 text-center bg-red-50 p-2 rounded">
-                    {oauthError}
-                  </div>
-                )}
-
-                {/* Divider */}
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      Or
-                    </span>
-                  </div>
-                </div>
-
-                {/* Email Registration Option */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setShowEmailForm(true)}
-                >
-                  Sign up with Email
-                </Button>
-
-                {/* Terms Reminder */}
-                <div className="text-center text-xs text-muted-foreground pt-2">
-                  By continuing, you agree to our{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('terms')}
-                    className="text-primary hover:underline"
+                {/* Right Side - Registration Form */}
+                <div className="p-8 md:p-12">
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="space-y-6"
                   >
-                    Terms
-                  </button>{' '}
-                  and{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('privacy')}
-                    className="text-primary hover:underline"
-                  >
-                    Privacy Policy
-                  </button>
+                    {/* Logo and Title */}
+                    <div className="text-center md:text-left space-y-4">
+                      <div className="flex justify-center md:justify-start">
+                        <img src={logo} alt="VeriNest" className="h-12 w-auto" />
+                      </div>
+                      <div>
+                        <h2 className="text-3xl font-bold text-slate-900">Create Account</h2>
+                        <p className="text-slate-600 mt-2">Choose your registration method</p>
+                      </div>
+                    </div>
+
+                    {/* Role Selection */}
+                    {!showEmailForm && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="space-y-4"
+                      >
+                        <Label className="text-sm font-medium text-slate-700">I am a:</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {[
+                            { value: 'worker', label: 'Worker', icon: <User className="w-4 h-4" /> },
+                            { value: 'employer', label: 'Employer', icon: <Crown className="w-4 h-4" /> },
+                            { value: 'vendor', label: 'Vendor', icon: <Sparkles className="w-4 h-4" /> }
+                          ].map((role) => (
+                            <motion.button
+                              key={role.value}
+                              type="button"
+                              onClick={() => {
+                              setSelectedRole(role.value as any);
+                              setFormData({ ...formData, role: role.value });
+                            }}
+                              className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                                selectedRole === role.value
+                                  ? 'border-primary bg-primary/5 text-primary shadow-lg'
+                                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                              }`}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <div className="flex flex-col items-center space-y-2">
+                                {role.icon}
+                                <span className="text-sm font-medium">{role.label}</span>
+                              </div>
+                            </motion.button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* OAuth Section */}
+                    {!showEmailForm && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="space-y-4"
+                      >
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-200"></span>
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white px-4 text-slate-500">Quick Sign Up</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {/* Google OAuth */}
+                          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button
+                              type="button"
+                              className="w-full h-12 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50 transition-all duration-200"
+                              onClick={() => handleOAuthLogin('google')}
+                              disabled={oauthLoading !== null || !selectedRole}
+                            >
+                              {oauthLoading === 'google' ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600 mr-2"></div>
+                              ) : (
+                                <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+                                  <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                  <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                  <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                  <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                                </svg>
+                              )}
+                              Continue with Google
+                            </Button>
+                          </motion.div>
+
+                          {/* Twitter/X OAuth */}
+                          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button
+                              type="button"
+                              className="w-full h-12 bg-black border-2 border-black hover:bg-slate-900 text-white transition-all duration-200"
+                              onClick={() => handleOAuthLogin('twitter')}
+                              disabled={oauthLoading !== null || !selectedRole}
+                            >
+                              {oauthLoading === 'twitter' ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              ) : (
+                                <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                </svg>
+                              )}
+                              Continue with X (Twitter)
+                            </Button>
+                          </motion.div>
+                        </div>
+
+                        {/* OAuth Error */}
+                        <AnimatePresence>
+                          {oauthError && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm"
+                            >
+                              {oauthError}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )}
+
+                    {/* Email Registration Option */}
+                    {!showEmailForm && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 }}
+                        className="space-y-4"
+                      >
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-200"></span>
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white px-4 text-slate-500">Or continue with email</span>
+                          </div>
+                        </div>
+
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full h-12 border-2 border-slate-200 hover:border-primary hover:bg-primary/5 transition-all duration-200"
+                            onClick={() => setShowEmailForm(true)}
+                            disabled={!selectedRole}
+                          >
+                            <Mail className="w-5 h-5 mr-3" />
+                            Sign up with Email
+                          </Button>
+                        </motion.div>
+                      </motion.div>
+                    )}
+
+                    {/* Email Registration Form */}
+                    <AnimatePresence>
+                      {showEmailForm && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.3 }}
+                          className="space-y-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-slate-900">Complete Registration</h3>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowEmailForm(false)}
+                              className="text-slate-600 hover:text-slate-900"
+                            >
+                              <ArrowLeft className="w-4 h-4 mr-1" />
+                              Back
+                            </Button>
+                          </div>
+
+                          <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="name" className="text-sm font-medium text-slate-700">Full Name</Label>
+                              <div className="relative">
+                                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Input
+                                  id="name"
+                                  type="text"
+                                  required
+                                  value={formData.name}
+                                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                  placeholder="Enter your full name"
+                                  className="pl-10 h-11 border-slate-200 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="username" className="text-sm font-medium text-slate-700">Username</Label>
+                              <div className="relative">
+                                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Input
+                                  id="username"
+                                  type="text"
+                                  required
+                                  value={formData.username}
+                                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                  placeholder="Choose a username"
+                                  className="pl-10 h-11 border-slate-200 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email Address</Label>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Input
+                                  id="email"
+                                  type="email"
+                                  required
+                                  value={formData.email}
+                                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                  placeholder="Enter your email address"
+                                  className="pl-10 h-11 border-slate-200 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                              <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Input
+                                  id="password"
+                                  type={showPassword ? "text" : "password"}
+                                  required
+                                  value={formData.password}
+                                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                  placeholder="Create a strong password"
+                                  className="pl-10 pr-10 h-11 border-slate-200 focus:border-primary"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="passwordConfirm" className="text-sm font-medium text-slate-700">Confirm Password</Label>
+                              <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Input
+                                  id="passwordConfirm"
+                                  type={showPasswordConfirm ? "text" : "password"}
+                                  required
+                                  value={formData.passwordConfirm}
+                                  onChange={(e) => setFormData({ ...formData, passwordConfirm: e.target.value })}
+                                  placeholder="Confirm your password"
+                                  className="pl-10 pr-10 h-11 border-slate-200 focus:border-primary"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                  {showPasswordConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="referral_code" className="text-sm font-medium text-slate-700">Referral Code (Optional)</Label>
+                              <Input
+                                id="referral_code"
+                                type="text"
+                                value={formData.referral_code}
+                                onChange={(e) => setFormData({ ...formData, referral_code: e.target.value })}
+                                placeholder="Enter referral code if you have one"
+                                className="h-11 border-slate-200 focus:border-primary"
+                              />
+                            </div>
+
+                            {/* Terms Agreement */}
+                            <div className="flex items-start space-x-3 p-4 bg-slate-50 rounded-lg">
+                              <Checkbox
+                                id="terms-checkbox"
+                                checked={acceptedTerms}
+                                onCheckedChange={(checked) => setAcceptedTerms(checked as boolean)}
+                                className="mt-1"
+                              />
+                              <Label htmlFor="terms-checkbox" className="text-sm leading-relaxed text-slate-600">
+                                I have read and agree to the{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveModal('terms')}
+                                  className="text-primary hover:underline font-medium"
+                                >
+                                  Terms and Conditions
+                                </button>{' '}
+                                and{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveModal('privacy')}
+                                  className="text-primary hover:underline font-medium"
+                                >
+                                  Privacy Policy
+                                </button>
+                              </Label>
+                            </div>
+
+                            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                              <Button 
+                                type="submit" 
+                                className="w-full h-12 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+                                disabled={loading || !acceptedTerms}
+                              >
+                                {loading ? (
+                                  <div className="flex items-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    Creating Account...
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center">
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                    Create Account
+                                  </div>
+                                )}
+                              </Button>
+                            </motion.div>
+                          </form>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Terms Reminder for OAuth */}
+                    {!showEmailForm && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.6 }}
+                        className="space-y-4"
+                      >
+                        <div className="text-center text-xs text-slate-500">
+                          By continuing, you agree to our{' '}
+                          <button
+                            type="button"
+                            onClick={() => setActiveModal('terms')}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Terms
+                          </button>{' '}
+                          and{' '}
+                          <button
+                            type="button"
+                            onClick={() => setActiveModal('privacy')}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Privacy Policy
+                          </button>
+                        </div>
+                        
+                        {/* Mobile Login Link */}
+                        <div className="text-center text-sm text-slate-600">
+                          Already have an account?{' '}
+                          <Link 
+                            to="/login"
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Sign in
+                          </Link>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Mobile Login Link for Email Form */}
+                    {showEmailForm && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.6 }}
+                        className="text-center text-sm text-slate-600"
+                      >
+                        Already have an account?{' '}
+                        <Link 
+                          to="/login"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Sign in
+                        </Link>
+                      </motion.div>
+                    )}
+                  </motion.div>
                 </div>
               </div>
-            )}
-
-            {/* Email Registration Form - Secondary Option */}
-            {showEmailForm && (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Create Account with Email</h3>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowEmailForm(false)}
-                  >
-                    ← Back
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Enter your full name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    type="text"
-                    required
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    placeholder="Choose a username"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="Enter your email address"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Create a strong password"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="passwordConfirm">Confirm Password</Label>
-                  <Input
-                    id="passwordConfirm"
-                    type="password"
-                    required
-                    value={formData.passwordConfirm}
-                    onChange={(e) => setFormData({ ...formData, passwordConfirm: e.target.value })}
-                    placeholder="Confirm your password"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="referral_code">Referral Code (Optional)</Label>
-                  <Input
-                    id="referral_code"
-                    type="text"
-                    value={formData.referral_code}
-                    onChange={(e) => setFormData({ ...formData, referral_code: e.target.value })}
-                    placeholder="Enter referral code if you have one"
-                  />
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={loading}
-                >
-                  {loading ? 'Creating Account...' : 'Create Account'}
-                </Button>
-
-                {/* Terms Reminder for Email Form */}
-                <div className="text-center text-xs text-muted-foreground">
-                  By creating an account, you agree to our{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('terms')}
-                    className="text-primary hover:underline"
-                  >
-                    Terms
-                  </button>{' '}
-                  and{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal('privacy')}
-                    className="text-primary hover:underline"
-                  >
-                    Privacy Policy
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="mt-6 text-center text-sm">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline font-medium">
-                Login
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
 
       {/* Legal Modals */}
@@ -527,15 +741,6 @@ const Register = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* OAuth Popup */}
-      {showOAuthPopup && (
-        <OAuthPopup
-          onClose={() => setShowOAuthPopup(false)}
-          onSuccess={handleOAuthSuccess}
-          onError={handleOAuthError}
-        />
-      )}
     </>
   );
 };

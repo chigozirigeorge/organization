@@ -7,8 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Alert, AlertDescription } from '../ui/alert';
 import { CheckCircle, Camera, FileText, UserCheck, ArrowLeft, ArrowRight, Shield, Scan, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { TermsAndConditions } from '../TermsAndConditions';
-import { PrivacyPolicy } from '../PrivacyPolicy';
+import { TermsAndConditions } from '../Landingpage/TermsAndConditions';
+import { PrivacyPolicy } from '../Landingpage/PrivacyPolicy';
 import { EnhancedImageUpload } from './EnhancedImageUpload';
 import { EnhancedFacialVerification } from './EnhancedFacialVerification';
 import { PersonalInformationForm, PersonalInfoData } from './PersonalInformationForm';

@@ -2,45 +2,47 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ProtectedLayout } from './components/ProtectedLayout';
+import { ProtectedLayout } from './components/shared/ProtectedLayout';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import { PaymentVerification } from './components/PaymentVerification';
-import { EmailVerification } from './components/EmailVerification';
+import { PaymentVerification } from './components/shared/PaymentVerification';
+import { EmailVerification } from './components/shared/EmailVerification';
 import { PaymentSuccess } from './pages/PaymentSuccess';
 import { PaymentFailed } from './pages/PaymentFailed';
-import { JobsList } from './components/JobsList';
-import { JobDetails } from './components/JobDetails';
+import { JobsList } from './components/worker/JobsList';
+import { JobDetails } from './components/employer/JobDetails';
 import { CreateJob } from './components/CreateJob';
-import { WorkerProfileSetup } from './components/WorkerProfileSetup';
-import { MyJobs } from './components/MyJobs';
-import { MyContracts } from './components/MyContracts';
-import { CreateJobApplication } from './components/CreateJobApplication';
-import { TermsAndConditions } from './components/TermsAndConditions';
-import { PrivacyPolicy } from './components/PrivacyPolicy';
-import { AboutUs } from './components/AboutUs';
-import { ContactUs } from './components/ContactUs';
-import { HelpCenter } from './components/HelpCenter';
-import { DisputeResolution } from './components/DisputeResolution';
-import { SafetyGuidelines } from './components/SafetyGuidelines';
-import { Careers } from './components/Careers';
-import { PressKit } from './components/PressKit';
-import { Blog } from './components/Blog';
+import { WorkerProfileSetup } from './components/worker/WorkerProfileSetup';
+import { MyJobs } from './components/employer/MyJobs';
+import { MyContracts } from './components/employer/MyContracts';
+import { CreateJobApplication } from './components/worker/CreateJobApplication';
+import { TermsAndConditions } from './components/Landingpage/TermsAndConditions';
+import { PrivacyPolicy } from './components/Landingpage/PrivacyPolicy';
+import { AboutUs } from './components/Landingpage/AboutUs';
+import { ContactUs } from './components/Landingpage/ContactUs';
+import { HelpCenter } from './components/Landingpage/HelpCenter';
+import { DisputeResolution } from './components/admins/DisputeResolution';
+import { SafetyGuidelines } from './components/Landingpage/SafetyGuidelines';
+import { Careers } from './components/Landingpage/Careers';
+import { PressKit } from './components/Landingpage/PressKit';
+import { Blog } from './components/Landingpage/Blog';
 import { KYCFlow } from './components/KYCFlow';
 import { ProfessionalKYCFlow } from './components/kyc/ProfessionalKYCFlow';
-import { RoleSelection } from './components/RoleSelection';
+import { RoleSelection } from './components/shared/RoleSelection';
 import { Settings } from './components/Settings';
-import { TransactionsPage } from './components/TransactionsPage';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { AdminDashboard } from './components/AdminDashboard';
-import { VerifierDashboard } from './components/VerifierDashboard';
-import { WorkerPortfolio } from './components/WorkerPortfolio';
+import { TransactionsPage } from './components/shared/TransactionsPage';
+import { ProtectedRoute } from './components/shared/ProtectedRoute';
+import { AdminDashboard } from './components/admins/AdminDashboard';
+import { VerifierDashboard } from './components/admins/VerifierDashboard';
+import { WorkerPortfolio } from './components/worker/WorkerPortfolio';
 import { Analytics } from "@vercel/analytics/react"
 import OAuthCallback from './pages/OAuthCallback';
 import OAuthRedirect from './pages/OAuthRedirect';
-import { TokenHandler } from './components/TokenHandler';
+import NavigationManager from './components/NavigationManager';
+import { TokenHandler } from './components/shared/TokenHandler';
+import PublicWorkerProfile from './pages/PublicWorkerProfile';
 
 // Main App Routes - All protected routes now go through Dashboard
 const AppRoutes = () => {
@@ -78,6 +80,9 @@ const AppRoutes = () => {
       <Route path="/press" element={<PressKit />} />
       <Route path="/blog" element={<Blog />} />
       
+      {/* Public Worker Profile - Username-based URLs */}
+      <Route path="/@:username" element={<PublicWorkerProfile />} />
+      
       {/* KYC Verification Flow */}
       <Route path="/verify/kyc" element={
         <ProtectedRoute>
@@ -110,6 +115,8 @@ function App() {
     <Router>
       <AuthProvider>
         <div className="min-h-screen bg-background text-foreground">
+          {/* Navigation manager records last non-sensitive path and handles back on sensitive pages */}
+          <NavigationManager />
           <AppRoutes />
           <Toaster position="top-right" />
           <Analytics />

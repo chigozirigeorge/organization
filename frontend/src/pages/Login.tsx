@@ -7,6 +7,8 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import logo from '@/assets/verinest.png';
+import { ForgotPasswordModal } from "../components/shared/ForgotPasswordModal";
+
 
 const Login = () => {
   const { login, isAuthenticated, authInitialized, loginWithOAuth } = useAuth();
@@ -15,6 +17,7 @@ const Login = () => {
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -161,6 +164,16 @@ const Login = () => {
               </Button>
             </form>
             
+            <div className="mt-2 text-right">
+              <button
+                type="button"
+                className="text-primary hover:underline text-sm"
+                onClick={() => setShowForgotModal(true)}
+              >
+                Forgot Password?
+              </button>
+            </div>
+
             <div className="mt-6 text-center text-sm">
               Don't have an account?{' '}
               <Link to="/register" className="text-primary hover:underline">
@@ -170,7 +183,7 @@ const Login = () => {
           </CardContent>
         </Card>
       </div>
-
+      <ForgotPasswordModal open={showForgotModal} onClose={() => setShowForgotModal(false)} />
     </>
   );
 };

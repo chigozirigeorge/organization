@@ -1,135 +1,213 @@
 // components/Settings.tsx
-import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { Button } from './ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Badge } from './ui/badge';
-import { Eye, EyeOff, Save, User, Shield, Key, Briefcase, UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
-import { Alert, AlertDescription } from './ui/alert';
-import { TransactionPinSetup } from './TransactionPinSetup';
-import { ChangeTransactionPin } from './ChangeTransactionPin';
+import { useEffect, useState, useMemo } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { Button } from "./ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Badge } from "./ui/badge";
+import {
+  Eye,
+  EyeOff,
+  Save,
+  User,
+  Shield,
+  Key,
+  Briefcase,
+  UserPlus,
+} from "lucide-react";
+import { toast } from "sonner";
+import { apiClient } from "../utils/api";
+import { Alert, AlertDescription } from "./ui/alert";
+import { TransactionPinSetup } from "./shared/TransactionPinSetup";
+import { ChangeTransactionPin } from "./shared/ChangeTransactionPin";
+import {
+  getSubscriptionStatus,
+  initiatePremiumPayment,
+  subscribeToPremium,
+} from "../services/subscription";
+import { getAvailableRoles, upgradeUserRole } from "../services/roles";
+import type { AllowedRole } from "../types/roles";
+
+const PUBLIC_BASE_URL = import.meta.env.VITE_PUBLIC_URL || "https://verinest.com";
 
 export const Settings = () => {
   const { user, token, refreshUser, updateUserRole } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState("profile");
   const [showPassword, setShowPassword] = useState(false);
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [showChangePin, setShowChangePin] = useState(false);
   const [usernameData, setUsernameData] = useState({
-  new_username: user?.username || '',
+    new_username: user?.username || "",
   });
 
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  
+
   // Profile state
   const [profileData, setProfileData] = useState({
-    username: user?.username || '',
-    name: user?.name || '',
-    email: user?.email || '',
+    username: user?.username || "",
+    name: user?.name || "",
+    email: user?.email || "",
   });
 
   // Password state
   const [passwordData, setPasswordData] = useState({
-    old_password: '',
-    new_password: '',
-    new_password_confirm: '',
+    old_password: "",
+    new_password: "",
+    new_password_confirm: "",
   });
+
+  // Subscription state
+  const [subscription, setSubscription] = useState<{
+    tier: string;
+    status: string;
+    expires_at: string;
+  } | null>(null);
+  const [subLoading, setSubLoading] = useState(false);
+
+  // Role state
+  const [availableRoles, setAvailableRoles] = useState<AllowedRole[]>([]);
+  const [roleLoading, setRoleLoading] = useState(false);
+
+  const referralLink = useMemo(
+    () => (user?.referral_code ? `${PUBLIC_BASE_URL}/register?ref=${user.referral_code}` : ""),
+    [user?.referral_code]
+  );
+  const publicProfileUrl = useMemo(
+    () => (user?.username ? `${PUBLIC_BASE_URL}/profile/${user.username}` : ""),
+    [user?.username]
+  );
+
+  const copyToClipboard = (text: string, message: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    toast.success(message);
+  };
+
+  useEffect(() => {
+    async function fetchSubscription() {
+      if (!token) return;
+      setSubLoading(true);
+      try {
+        const res = await getSubscriptionStatus();
+        setSubscription(res.data);
+      } catch (err) {
+        toast.error("Failed to fetch subscription status");
+      } finally {
+        setSubLoading(false);
+      }
+    }
+    fetchSubscription();
+  }, [token]);
+
+  useEffect(() => {
+    async function fetchRoles() {
+      if (!token || !user) return;
+      setRoleLoading(true);
+      try {
+        const res = await getAvailableRoles();
+        setAvailableRoles(res.data.available_roles.map((r) => r.role));
+      } catch (err) {
+        toast.error("Failed to fetch available roles");
+      } finally {
+        setRoleLoading(false);
+      }
+    }
+    fetchRoles();
+  }, [token, user]);
+
+  const handleUpgrade = async () => {
+    setSubLoading(true);
+    try {
+      if (!token) {
+        toast.error('You must be logged in to subscribe');
+        setSubLoading(false);
+        return;
+      }
+      const res = await initiatePremiumPayment();
+      // You may want to show a modal for payment confirmation, then call subscribeToPremium with the reference
+      toast.success("Payment initiated. Please confirm with your transaction PIN.");
+      // Example: subscribeToPremium(token, res.data.reference);
+    } catch (err) {
+      toast.error("Failed to initiate premium payment");
+    } finally {
+      setSubLoading(false);
+    }
+  };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    try {
-      const response = await fetch('https://verinest.up.railway.app/api/users/name', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: profileData.name,
-        }),
-      });
 
-      if (response.ok) {
-        toast.success('Profile updated successfully!');
-        await refreshUser();
-      } else {
-        throw new Error('Failed to update profile');
-      }
+    try {
+      await apiClient.put('/users/name', { name: profileData.name });
+      toast.success("Profile updated successfully!");
+      await refreshUser();
     } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
     } finally {
       setLoading(false);
     }
   };
 
   // Check username availability
-const checkUsernameAvailability = async (username: string) => {
-  if (username.length < 3) {
-    setUsernameAvailable(false);
-    return;
-  }
-
-  if (username === user?.username) {
-    setUsernameAvailable(true);
-    return;
-  }
-
-  setCheckingUsername(true);
-  try {
-    const response = await fetch(`https://verinest.up.railway.app/api/users/check-username?username=${encodeURIComponent(username)}`);
-    if (response.ok) {
-      const data = await response.json();
-      setUsernameAvailable(data.available);
+  const checkUsernameAvailability = async (username: string) => {
+    if (username.length < 3) {
+      setUsernameAvailable(false);
+      return;
     }
-  } catch (error) {
-    console.error('Error checking username:', error);
-  } finally {
-    setCheckingUsername(false);
-  }
-};
+
+    if (username === user?.username) {
+      setUsernameAvailable(true);
+      return;
+    }
+
+    setCheckingUsername(true);
+    try {
+      const response = await fetch(
+        `https://verinest.up.railway.app/api/users/check-username?username=${encodeURIComponent(
+          username
+        )}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setUsernameAvailable(data.available);
+      }
+    } catch (error) {
+      console.error("Error checking username:", error);
+    } finally {
+      setCheckingUsername(false);
+    }
+  };
 
   // Update username
   const handleUsernameUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!usernameAvailable) {
-      toast.error('Please choose an available username');
+      toast.error("Please choose an available username");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('https://verinest.up.railway.app/api/users/username', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: usernameData.new_username,
-        }),
-      });
-
-      if (response.ok) {
-        toast.success('Username updated successfully!');
-        await refreshUser();
-        setUsernameAvailable(null);
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update username');
-      }
+      await apiClient.put('/users/username', { username: usernameData.new_username });
+      toast.success("Username updated successfully!");
+      await refreshUser();
+      setUsernameAvailable(null);
     } catch (error: any) {
-      console.error('Error updating username:', error);
-      toast.error(error.message || 'Failed to update username');
+      console.error("Error updating username:", error);
+      toast.error(error.message || "Failed to update username");
     } finally {
       setLoading(false);
     }
@@ -138,22 +216,11 @@ const checkUsernameAvailability = async (username: string) => {
   const handleResetPin = async () => {
     setLoading(true);
     try {
-      const response = await fetch('https://verinest.up.railway.app/api/auth/reset-transaction-pin', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        toast.success('PIN reset instructions sent to your email!');
-      } else {
-        throw new Error('Failed to send PIN reset');
-      }
+      await apiClient.post('/auth/reset-transaction-pin');
+      toast.success("PIN reset instructions sent to your email!");
     } catch (error: any) {
-      console.error('Error resetting PIN:', error);
-      toast.error(error.message || 'Failed to reset PIN');
+      console.error("Error resetting PIN:", error);
+      toast.error(error.message || "Failed to reset PIN");
     } finally {
       setLoading(false);
     }
@@ -162,51 +229,65 @@ const checkUsernameAvailability = async (username: string) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    try {
-      const response = await fetch('https://verinest.up.railway.app/api/users/password', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(passwordData),
-      });
 
-      if (response.ok) {
-        toast.success('Password updated successfully!');
-        setPasswordData({
-          old_password: '',
-          new_password: '',
-          new_password_confirm: '',
-        });
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update password');
-      }
+    try {
+      await apiClient.put('/users/password', passwordData);
+      toast.success("Password updated successfully!");
+      setPasswordData({
+        old_password: "",
+        new_password: "",
+        new_password_confirm: "",
+      });
     } catch (error: any) {
-      console.error('Error updating password:', error);
-      toast.error(error.message || 'Failed to update password');
+      console.error("Error updating password:", error);
+      toast.error(error.message || "Failed to update password");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRoleChange = async (newRole: 'worker' | 'employer') => {
+  const handleRoleChange = async (newRole: "worker" | "employer") => {
     setLoading(true);
-    
+
     try {
       const success = await updateUserRole(newRole);
       if (success) {
         toast.success(`You are now a ${newRole}!`);
       } else {
-        throw new Error('Failed to update role');
+        throw new Error("Failed to update role");
       }
     } catch (error: any) {
-      console.error('Error updating role:', error);
-      toast.error(error.message || 'Failed to update role');
+      console.error("Error updating role:", error);
+      toast.error(error.message || "Failed to update role");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRoleUpgrade = async (newRole: AllowedRole) => {
+    if (!user) return;
+    setRoleLoading(true);
+    try {
+      if (!token) {
+        toast.error('You must be logged in to perform this action');
+        setRoleLoading(false);
+        return;
+      }
+      // The backend upgrade endpoint currently only supports upgrading to Worker or Employer.
+      // Prevent sending unsupported roles like 'vendor' which will cause 400 validation errors.
+      if (newRole === 'vendor') {
+        toast.error('Please contact support or use the Vendor onboarding flow to become a Vendor.');
+        setRoleLoading(false);
+        return;
+      }
+
+      await upgradeUserRole({ target_user_id: user.id, new_role: newRole });
+      toast.success(`Role upgraded to ${newRole}`);
+      await refreshUser();
+    } catch (err) {
+      toast.error("Failed to upgrade role");
+    } finally {
+      setRoleLoading(false);
     }
   };
 
@@ -215,11 +296,13 @@ const checkUsernameAvailability = async (username: string) => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Manage your account settings and preferences</p>
+          <p className="text-muted-foreground">
+            Manage your account settings and preferences
+          </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -235,6 +318,10 @@ const checkUsernameAvailability = async (username: string) => {
             <TabsTrigger value="role" className="flex items-center gap-2">
               <Briefcase className="h-4 w-4" />
               Role Management
+            </TabsTrigger>
+            <TabsTrigger value="subscription" className="flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Subscription
             </TabsTrigger>
           </TabsList>
 
@@ -259,7 +346,7 @@ const checkUsernameAvailability = async (username: string) => {
                         placeholder="Enter your full name"
                       />
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label htmlFor="username">Username</Label>
                       <div className="space-y-2">
@@ -285,8 +372,8 @@ const checkUsernameAvailability = async (username: string) => {
                           </div>
                         )}
                       </div>
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         onClick={handleUsernameUpdate}
                         disabled={!usernameAvailable || usernameData.new_username === user?.username || loading}
                         size="sm"
@@ -311,75 +398,80 @@ const checkUsernameAvailability = async (username: string) => {
 
                   <Button type="submit" disabled={loading}>
                     <Save className="h-4 w-4 mr-2" />
-                    {loading ? 'Updating...' : 'Update Profile'}
+                    {loading ? "Updating..." : "Update Profile"}
                   </Button>
                 </form>
               </CardContent>
             </Card>
 
-        
-                {/* Account Status Card */}
-                <Card>
-                <CardHeader>
-                    <CardTitle>Account Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label>Verification Status</Label>
-                        <div>
-                        <Badge 
-                            variant={
-                            user?.kyc_verified === 'verified' ? 'default' :
-                            user?.kyc_verified === 'pending' ? 'secondary' :
-                            user?.kyc_verified === 'rejected' ? 'destructive' :
-                            'destructive'
-                            }
-                        >
-                            {user?.kyc_verified === 'verified' ? 'Verified' :
-                            user?.kyc_verified === 'pending' ? 'Under Review' :
-                            user?.kyc_verified === 'rejected' ? 'Rejected' :
-                            'Not Verified'}
-                        </Badge>
-                        </div>
-                        {user?.verification_status && (
-                        <p className="text-xs text-muted-foreground">
-                            Backend: {user.verification_status}
-                        </p>
-                        )}
+            {/* Account Status Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Account Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Verification Status</Label>
+                    <div>
+                      <Badge
+                        variant={
+                          user?.kyc_verified === "verified"
+                            ? "default"
+                            : user?.kyc_verified === "pending"
+                            ? "secondary"
+                            : user?.kyc_verified === "rejected"
+                            ? "destructive"
+                            : "destructive"
+                        }
+                      >
+                        {user?.kyc_verified === "verified"
+                          ? "Verified"
+                          : user?.kyc_verified === "pending"
+                          ? "Under Review"
+                          : user?.kyc_verified === "rejected"
+                          ? "Rejected"
+                          : "Not Verified"}
+                      </Badge>
                     </div>
-                    
-                    <div className="space-y-2">
-                        <Label>Trust Score</Label>
-                        <div className="text-2xl font-bold text-primary">
-                        {user?.trust_score || 0}
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                        <Label>Current Role</Label>
-                        <div>
-                        <Badge variant="outline" className="capitalize">
-                            {user?.role || 'user'}
-                        </Badge>
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                        <Label>Email Verification</Label>
-                        <div>
-                        <Badge variant={user?.email_verified ? 'default' : 'destructive'}>
-                            {user?.email_verified ? 'Verified' : 'Not Verified'}
-                        </Badge>
-                        </div>
-                    </div>
+                    {user?.verification_status && (
+                      <p className="text-xs text-muted-foreground">
+                        Backend: {user.verification_status}
+                      </p>
+                    )}
+                  </div>
 
-                     <div className="space-y-2">
+                  <div className="space-y-2">
+                    <Label>Trust Score</Label>
+                    <div className="text-2xl font-bold text-primary">
+                      {user?.trust_score || 0}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Current Role</Label>
+                    <div>
+                      <Badge variant="outline" className="capitalize">
+                        {user?.role || "user"}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Email Verification</Label>
+                    <div>
+                      <Badge variant={user?.email_verified ? "default" : "destructive"}>
+                        {user?.email_verified ? "Verified" : "Not Verified"}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="referral_code">Referral Code</Label>
                     <div className="flex gap-2">
                       <Input
                         id="referral_code"
-                        value={user?.referral_code || ''}
+                        value={user?.referral_code || ""}
                         disabled
                         className="bg-muted flex-1"
                         placeholder="Your referral code"
@@ -389,8 +481,7 @@ const checkUsernameAvailability = async (username: string) => {
                         variant="outline"
                         onClick={() => {
                           if (user?.referral_code) {
-                            navigator.clipboard.writeText(user.referral_code);
-                            toast.success('Referral code copied to clipboard!');
+                            copyToClipboard(user.referral_code, "Referral code copied to clipboard!");
                           }
                         }}
                       >
@@ -401,6 +492,29 @@ const checkUsernameAvailability = async (username: string) => {
                       Share this code with friends to earn rewards
                     </p>
                   </div>
+
+                  {referralLink && (
+                    <div className="space-y-2">
+                      <Label>Referral Link</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={referralLink}
+                          disabled
+                          className="bg-muted flex-1"
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => copyToClipboard(referralLink, "Referral link copied!")}
+                          variant="outline"
+                        >
+                          Copy Link
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Send this link to onboard new users and track referrals.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Add referral stats if available */}
                   {user?.referral_count !== undefined && (
@@ -418,9 +532,72 @@ const checkUsernameAvailability = async (username: string) => {
                       </div>
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Public Profile + backend data */}
+          <TabsContent value="profile" className="space-y-6">
+            {publicProfileUrl && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Public Profile & Links</CardTitle>
+                  <CardDescription>
+                    Share your worker profile with employers or external partners.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground flex-1">Profile URL</span>
+                    <div className="flex-1">
+                      <Input value={publicProfileUrl} disabled className="bg-muted" />
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(publicProfileUrl, "Public profile link copied!")}
+                    >
+                      Copy
+                    </Button>
+                  </div>
                 </CardContent>
-                </Card>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Backend Data Snapshot</CardTitle>
+                <CardDescription>
+                  View the fields that the backend sends so you can confirm completeness.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { label: 'Trust Score', value: user?.trust_score },
+                    { label: 'Wallet Address', value: user?.wallet_address || 'Not set' },
+                    { label: 'Nationality', value: user?.nationality || 'N/A' },
+                    { label: 'LGA', value: user?.lga || 'N/A' },
+                    { label: 'DOB', value: user?.dob ? new Date(user.dob).toLocaleDateString() : 'N/A' },
+                    { label: 'Nearest Landmark', value: user?.nearest_landmark || 'N/A' },
+                    { label: 'Verification Type', value: user?.verification_type || 'N/A' },
+                    { label: 'Verification Status', value: user?.verification_status || 'N/A' },
+                    { label: 'Verification Number', value: user?.verification_number || 'N/A' },
+                    { label: 'NIN', value: user?.nin_number || 'N/A' },
+                    { label: 'Document Verified', value: user?.document_verified ? 'Yes' : 'No' },
+                    { label: 'Email Verified', value: user?.email_verified ? 'Yes' : 'No' },
+                  ].map((field) => (
+                    <div key={field.label} className="p-3 bg-muted rounded-lg">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {field.label}
+                      </p>
+                      <p className="text-sm font-semibold text-foreground">{field.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Security Tab */}
@@ -439,7 +616,7 @@ const checkUsernameAvailability = async (username: string) => {
                     <div className="relative">
                       <Input
                         id="old_password"
-                        type={showPassword ? 'text' : 'password'}
+                        type={showPassword ? "text" : "password"}
                         value={passwordData.old_password}
                         onChange={(e) => setPasswordData({ ...passwordData, old_password: e.target.value })}
                         placeholder="Enter current password"
@@ -460,7 +637,7 @@ const checkUsernameAvailability = async (username: string) => {
                     <Label htmlFor="new_password">New Password</Label>
                     <Input
                       id="new_password"
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={passwordData.new_password}
                       onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
                       placeholder="Enter new password"
@@ -471,19 +648,19 @@ const checkUsernameAvailability = async (username: string) => {
                     <Label htmlFor="new_password_confirm">Confirm New Password</Label>
                     <Input
                       id="new_password_confirm"
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={passwordData.new_password_confirm}
                       onChange={(e) => setPasswordData({ ...passwordData, new_password_confirm: e.target.value })}
                       placeholder="Confirm new password"
                     />
                   </div>
 
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={loading || !passwordData.old_password || !passwordData.new_password || passwordData.new_password !== passwordData.new_password_confirm}
                   >
                     <Key className="h-4 w-4 mr-2" />
-                    {loading ? 'Updating...' : 'Change Password'}
+                    {loading ? "Updating..." : "Change Password"}
                   </Button>
                 </form>
               </CardContent>
@@ -496,111 +673,43 @@ const checkUsernameAvailability = async (username: string) => {
               <CardHeader>
                 <CardTitle>Role Management</CardTitle>
                 <CardDescription>
-                  Choose how you want to use VeriNest. You can change your role at any time.
+                  Choose your role: Worker, Employer, or Vendor.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Worker Role Card */}
-                  <Card className={`border-2 ${
-                    user?.role === 'worker' ? 'border-primary bg-primary/5' : 'border-muted'
-                  }`}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Briefcase className="h-5 w-5" />
-                        Worker
-                        {user?.role === 'worker' && (
-                          <Badge variant="default" className="ml-auto">Current</Badge>
-                        )}
-                      </CardTitle>
-                      <CardDescription>
-                        Find jobs and get hired for your skills
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Browse available jobs
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Set your rates and availability
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Build your professional profile
-                        </li>
-                      </ul>
-                      
-                      <Button 
-                        className="w-full"
-                        variant={user?.role === 'worker' ? 'default' : 'outline'}
-                        onClick={() => handleRoleChange('worker')}
-                        disabled={loading || user?.role === 'worker'}
+              <CardContent>
+                {roleLoading ? (
+                  <div>Loading roles...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {availableRoles.map((role) => (
+                      <Card
+                        key={role}
+                        className={`border-2 ${
+                          user?.role === role ? "border-primary bg-primary/5" : "border-muted"
+                        }`}
                       >
-                        {user?.role === 'worker' ? 'Current Role' : 'Become Worker'}
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  {/* Employer Role Card */}
-                  <Card className={`border-2 ${
-                    user?.role === 'employer' ? 'border-primary bg-primary/5' : 'border-muted'
-                  }`}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <UserPlus className="h-5 w-5" />
-                        Employer
-                        {user?.role === 'employer' && (
-                          <Badge variant="default" className="ml-auto">Current</Badge>
-                        )}
-                      </CardTitle>
-                      <CardDescription>
-                        Post jobs and hire skilled workers
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Post job listings
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Browse skilled workers
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
-                          Manage your workforce
-                        </li>
-                      </ul>
-                      
-                      <Button 
-                        className="w-full"
-                        variant={user?.role === 'employer' ? 'default' : 'outline'}
-                        onClick={() => handleRoleChange('employer')}
-                        disabled={loading || user?.role === 'employer'}
-                      >
-                        {user?.role === 'employer' ? 'Current Role' : 'Become Employer'}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Role Requirements */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Role Requirements</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground space-y-2">
-                      <p>• Identity verification is required to become a Worker</p>
-                      <p>• Employers can post jobs immediately after registration</p>
-                      <p>• You can switch roles at any time</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                        <CardHeader>
+                          <CardTitle className="capitalize">{role}</CardTitle>
+                          <CardDescription>
+                            {role === "worker" && "Find jobs and get hired for your skills"}
+                            {role === "employer" && "Post jobs and hire skilled workers"}
+                            {role === "vendor" && "Offer services and manage your business"}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Button
+                            className="w-full"
+                            variant={user?.role === role ? "default" : "outline"}
+                            onClick={() => handleRoleUpgrade(role)}
+                            disabled={roleLoading || user?.role === role}
+                          >
+                            {user?.role === role ? "Current Role" : `Become ${role.charAt(0).toUpperCase() + role.slice(1)}`}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -614,7 +723,7 @@ const checkUsernameAvailability = async (username: string) => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {user?.transaction_pin ? (
+                {user?.transaction_pin_set ? (
                   <div className="space-y-4">
                     <Alert>
                       <Shield className="h-4 w-4" />
@@ -622,20 +731,20 @@ const checkUsernameAvailability = async (username: string) => {
                         Your transaction PIN is set up and active.
                       </AlertDescription>
                     </Alert>
-                    
+
                     <div className="grid gap-4">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => setShowChangePin(true)}
                       >
                         Change Transaction PIN
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={handleResetPin}
                         disabled={loading}
                       >
-                        {loading ? 'Resetting...' : 'Reset PIN via Email'}
+                        {loading ? "Resetting..." : "Reset PIN via Email"}
                       </Button>
                     </div>
                   </div>
@@ -647,8 +756,8 @@ const checkUsernameAvailability = async (username: string) => {
                         You haven't set up a transaction PIN yet. Set one up to secure your financial transactions.
                       </AlertDescription>
                     </Alert>
-                    
-                    <Button 
+
+                    <Button
                       onClick={() => setShowPinSetup(true)}
                       className="w-full"
                     >
@@ -660,16 +769,52 @@ const checkUsernameAvailability = async (username: string) => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Subscription Tab */}
+          <TabsContent value="subscription" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Subscription Management</CardTitle>
+                <CardDescription>
+                  View and manage your subscription tier.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {subLoading ? (
+                  <div>Loading...</div>
+                ) : subscription ? (
+                  <div>
+                    <p>
+                      <strong>Tier:</strong> {subscription.tier}
+                    </p>
+                    <p>
+                      <strong>Status:</strong> {subscription.status}
+                    </p>
+                    <p>
+                      <strong>Expires At:</strong> {subscription.expires_at}
+                    </p>
+                    {subscription.tier === "basic" ? (
+                      <Button onClick={handleUpgrade}>Upgrade to Premium</Button>
+                    ) : (
+                      <Badge variant="default">Premium Active</Badge>
+                    )}
+                  </div>
+                ) : (
+                  <div>No subscription info available.</div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
-         {/* Add the TransactionPinSetup modal */}
-         <TransactionPinSetup
+        {/* Add the TransactionPinSetup modal */}
+        <TransactionPinSetup
           isOpen={showPinSetup}
           onClose={() => setShowPinSetup(false)}
           onSetupComplete={() => {
             setShowPinSetup(false);
             refreshUser(); // Refresh user data to get the new PIN status
-            toast.success('Transaction PIN set up successfully!');
+            toast.success("Transaction PIN set up successfully!");
           }}
         />
 
@@ -680,7 +825,7 @@ const checkUsernameAvailability = async (username: string) => {
           onSuccess={() => {
             setShowChangePin(false);
             refreshUser();
-            toast.success('Transaction PIN changed successfully!');
+            toast.success("Transaction PIN changed successfully!");
           }}
         />
       </div>

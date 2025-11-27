@@ -17,6 +17,7 @@ import { CreateServiceForm } from './CreateServiceForm';
 import { vendorApi } from '../../utils/vendorApi';
 import { VendorService, ServiceCategory } from '../../types/vendor.types';
 import { useAuth } from '../../contexts/AuthContext';
+import { listJobs } from '../../services/labour';
 
 const SERVICE_CATEGORIES: ServiceCategory[] = [
   'Electronics', 'HomeAppliances', 'Fashion', 'Beauty', 
@@ -75,11 +76,9 @@ export const VendorMarketplace: React.FC = () => {
       const servicesData = await vendorApi.searchServices(servicesParams);
       setServices(servicesData);
 
-      const jobsResponse = await fetch('https://verinest.up.railway.app/api/labour/jobs?page=1&limit=20');
-      if (jobsResponse.ok) {
-        const jobsData = await jobsResponse.json();
-        setJobs(jobsData.data || jobsData.jobs || []);
-      }
+      // Use labour service to list jobs
+  const jobsData = await listJobs({ page: 1, limit: 20 });
+  setJobs(jobsData.data || jobsData.jobs || jobsData || []);
     } catch (error: any) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load marketplace data');

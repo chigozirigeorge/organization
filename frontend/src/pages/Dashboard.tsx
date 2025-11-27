@@ -5,20 +5,20 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { JobsList } from '../components/JobsList';
-import { WorkerProfileSetup } from '../components/WorkerProfileSetup';
+import { JobsList } from '../components/worker/JobsList';
+import { WorkerProfileSetup } from '../components/worker/WorkerProfileSetup';
 import { CreateJob } from '../components/CreateJob';
-import { Navbar } from '../components/Navbar';
-import { WalletManagement } from '@/components/WalletManagement';
-import { Footer } from '../components/Footer';
-import { MyJobs } from '../components/MyJobs';
-import { MyContracts } from '../components/MyContracts';
-import { WorkerDashboard } from '../components/WorkerDashboard';
-import { EmployerDashboard } from '../components/EmployerDashboard';
-import { JobProgress } from '../components/JobProgress';
-import { JobReviews } from '../components/JobReviews';
-import { DisputeManagement } from '../components/DisputeManagement';
-import { EscrowManagement } from '../components/EscrowManagement';
+import { Navbar } from '../components/Landingpage/Navbar';
+import { WalletManagement } from '@/components/shared/WalletManagement';
+import { Footer } from '../components/Landingpage/Footer';
+import { MyJobs } from '../components/employer/MyJobs';
+import { MyContracts } from '../components/employer/MyContracts';
+import { WorkerDashboard } from '../components/worker/WorkerDashboard';
+import { EmployerDashboard } from '../components/employer/EmployerDashboard';
+import { JobProgress } from '../components/employer/JobProgress';
+import { JobReviews } from '../components/employer/JobReviews';
+import { DisputeManagement } from '../components/admins/DisputeManagement';
+import { EscrowManagement } from '../components/shared/EscrowManagement';
 import { 
   AlertCircle, Briefcase, UserPlus, Wallet, Home, Settings, FileText, 
   TrendingUp, Users, Star, Shield, CreditCard, SettingsIcon, Menu, X,
@@ -27,25 +27,28 @@ import {
   Image as ImageIcon, MessageCircle, CheckCircle, BadgeCheck, CircleAlert,
   Store
 } from 'lucide-react';
-import { RoleSelection } from '@/components/RoleSelection';
+import { RoleSelection } from '@/components/shared/RoleSelection'; 
+import { getWorkerDashboard } from '../services/labour';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Settings as Setting } from '@/components/Settings';
-import { VerifierDashboard } from '@/components/VerifierDashboard'; 
-import { AdminDashboard } from '@/components/AdminDashboard'; 
-import { WorkerPortfolio } from '@/components/WorkerPortfolio';
-import { WorkersList } from '@/components/WorkersList';
-import { JobDetails } from '@/components/JobDetails';
-import { CreateJobApplication } from '@/components/CreateJobApplication';
-import { CustomerServiceDashboard } from '@/components/CustomerServiceDashboard';
-import { ChatSystem } from '@/components/ChatSystem';
-import { SupportTickets } from '@/components/SupportTickets';
-import { WorkerProfile } from '@/components/WorkerProfile';
+import { VerifierDashboard } from '@/components/admins/VerifierDashboard';  
+import { AdminDashboard } from '@/components/admins/AdminDashboard';  
+import { WorkerPortfolio } from '@/components/worker/WorkerPortfolio';
+import { WorkersList } from '@/components/worker/WorkersList'; 
+import { JobDetails } from '@/components/employer/JobDetails';
+import { ContractSign } from '@/components/employer/ContractSign';
+import { CreateJobApplication } from '@/components/worker/CreateJobApplication'; 
+import { CustomerServiceDashboard } from '@/components/admins/CustomerServiceDashboard'; 
+import { ChatSystem } from '@/components/chat/ChatSystem'; 
+import { SupportTickets } from '@/components/admins/SupportTickets'; 
+import { WorkerProfile } from '@/components/worker/WorkerProfile';
 import { VendorDashboard } from '@/components/vendor/VendorDashboard';
 import { MyServices } from '@/components/vendor/MyServices';
 import { ServiceDetails } from '@/components/vendor/ServiceDetails';
 import { PurchaseService } from '@/components/vendor/PurchaseService';
 import { VendorMarketplace } from '@/components/vendor/VendorMarketplace';
+import SettingsDropdown from '@/components/shared/SettingsDropdown';
 
 // Define interfaces for better TypeScript support
 interface DashboardStat {
@@ -91,10 +94,12 @@ const Dashboard = () => {
     if (!isAuthenticated) {
       navigate('/login');
     } else {
+      // Refresh user data to get the latest information
+      refreshUser();
       fetchDashboardStats();
       setLoading(false);
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, refreshUser]);
 
   if (user && !user.role) {
     return <RoleSelection />;
@@ -160,7 +165,14 @@ const Dashboard = () => {
         endpoint = 'https://verinest.up.railway.app/api/support/stats';
       }
 
-      if (endpoint) {
+      if (user?.role === 'worker') {
+        try {
+          const data = await getWorkerDashboard();
+          setDashboardStats(data.stats || data || {});
+        } catch (err) {
+          console.error('Failed to fetch worker dashboard via service:', err);
+        }
+      } else if (endpoint) {
         const response = await fetch(endpoint, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -442,6 +454,14 @@ const Dashboard = () => {
     }
 
     // Handle job details view
+    // Handle contract signing route explicitly before job-details
+    if (location.pathname.includes('/dashboard/contracts/') && location.pathname.includes('/sign')) {
+      const pathSegments = location.pathname.split('/');
+      const contractId = pathSegments[3];
+      console.log('🔐 Contract sign route detected, contractId:', contractId);
+      return <ContractSign contractId={contractId} />;
+    }
+
     if (activeSection === 'job-details') {
       const pathSegments = location.pathname.split('/');
       const jobIdFromUrl = pathSegments[3]; // Get jobId from URL
@@ -503,21 +523,22 @@ const Dashboard = () => {
     return <ServiceDetails />;
   }
 
-    // Always show role-specific dashboard for 'home' section
+    // Home now shows role-appropriate content instead of Feed
     if (activeSection === 'home') {
-      switch (user.role) {
-        case 'worker':
-          return <WorkerDashboard />;
-        case 'employer':
-          return <EmployerDashboard />;
-        case 'verifier':
-          return <VerifierDashboard />;
-        case 'admin':
-          return <AdminDashboard />;
-        case 'customer_care':
-          return <CustomerServiceDashboard />;
-        default:
-          return <JobsList />;
+      // Show role-specific content instead of problematic feed
+      if (user.role === 'worker') {
+        return <JobsList />; // Workers see jobs
+      } else if (user.role === 'employer') {
+        return <WorkersList />; // Employers see workers
+      } else if (user.role === 'vendor') {
+        return <VendorMarketplace />; // Vendors see marketplace
+      } else {
+        // For other roles (admin, verifier, customer_care), show their respective dashboards
+        if (user.role === 'verifier') return <VerifierDashboard />;
+        if (user.role === 'admin') return <AdminDashboard />;
+        if (user.role === 'customer_care') return <CustomerServiceDashboard />;
+        // Fallback to jobs list
+        return <JobsList />;
       }
     }
 
@@ -551,20 +572,15 @@ const Dashboard = () => {
         if (location.pathname.includes('/dashboard/jobs/') && !location.pathname.includes('/apply')) {
           return <JobDetails jobId={jobIdFromUrl} key={jobIdFromUrl} />;
         }
-        // Fallback to role-specific dashboard
-        switch (user.role) {
-          case 'worker':
-            return <WorkerDashboard />;
-          case 'employer':
-            return <EmployerDashboard />;
-          case 'verifier':
-            return <VerifierDashboard />;
-          case 'admin':
-            return <AdminDashboard />;
-          case 'customer_care':
-            return <CustomerServiceDashboard />;
-          default:
-            return <JobsList />;
+        // Fallback to role-appropriate content instead of Feed
+        if (user.role === 'worker') {
+          return <JobsList />;
+        } else if (user.role === 'employer') {
+          return <WorkersList />;
+        } else if (user.role === 'vendor') {
+          return <VendorMarketplace />;
+        } else {
+          return <JobsList />; // Safe fallback
         }
     }
   };
@@ -859,14 +875,7 @@ const Dashboard = () => {
 
             {/* Sidebar Footer */}
             <div className="p-4 border-t border-slate-200/60">
-              <Button
-                variant="ghost"
-                className="w-full justify-start text-slate-600 hover:text-slate-800"
-                onClick={() => handleNavigation('/dashboard/settings')}
-              >
-                <SettingsIcon className="h-4 w-4 mr-3" />
-                Settings
-              </Button>
+              <SettingsDropdown />
             </div>
           </div>
         </div>

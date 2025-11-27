@@ -15,13 +15,16 @@ interface User {
   verification_status?: 'pending' | 'submitted' | 'approved' | 'rejected';
   verification_data?: any;
   wallet_created?: boolean;
-  transaction_pin: number;
+  // hashed PIN stored on the backend (never expose actual PIN)
+  transaction_pin_hash?: string | null;
+  // boolean helper for UI to know whether a PIN is set
+  transaction_pin_set?: boolean;
   bank_account_linked?: boolean;
   profile_completed?: boolean;
   phone?: number;
   address?: string;
 
-  subscription_tier?: 'basic' | 'premium';
+  subscription_tier?: 'free' | 'premium';
   role_change_count?: number;
   role_change_reset_at?: string;
   
@@ -61,6 +64,8 @@ interface AuthContextType {
   setUserProfile: (profile: any) => void;
   loading: boolean;
   updateUser: (userData: Partial<User>) => void;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   // Verification flow methods
   startVerificationFlow: () => void;
   completeVerificationStep: (step: string, data?: any) => void;
@@ -127,6 +132,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Helper function to safely get boolean values with defaults
   const getSafeBoolean = (value: boolean | undefined | null, defaultValue: boolean = false): boolean => {
     return value !== undefined && value !== null ? value : defaultValue;
+  };
+  
+  // Forgot Password
+  const forgotPassword = async (email: string): Promise<void> => {
+    try {
+      await apiClient.post('/auth/forgot-password', { email });
+      toast.success('Password reset email sent!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send password reset email');
+      throw error;
+    }
+  };
+  
+  // Reset Password
+  const resetPassword = async (token: string, newPassword: string): Promise<void> => {
+    try {
+      await apiClient.post('/auth/reset-password', { token, new_password: newPassword });
+      toast.success('Password has been reset!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to reset password');
+      throw error;
+    }
   };
 
   // Initialize auth state
@@ -247,8 +274,9 @@ const normalizeUserData = (userData: any): User => {
     bank_account_linked: getSafeBoolean(userData.bank_account_linked),
     profile_completed: getSafeBoolean(userData.profile_completed),
     
-    // Transaction PIN
-    transaction_pin: userData.transaction_pin || null,
+  // Transaction PIN (hashed) presence flag — do NOT store raw PIN in frontend
+  transaction_pin_hash: userData.transaction_pin_hash || null,
+  transaction_pin_set: !!userData.transaction_pin_hash,
     
     // Backend fields - include ALL fields from backend
     verified: userData.verified,
@@ -269,6 +297,15 @@ const normalizeUserData = (userData: any): User => {
     // Additional fields that might be missing
     verification_data: userData.verification_data,
     google_id: userData.google_id,
+    
+    // Role and subscription fields
+    role_change_count: userData.role_change_count || 0,
+    role_change_reset_at: userData.role_change_reset_at,
+    subscription_tier: userData.subscription_tier || 'free',
+    
+    // Helper methods
+    has_premium_subscription: () => userData.subscription_tier === 'premium',
+    get_monthly_role_changes: () => userData.subscription_tier === 'premium' ? Infinity : 5,
   };
 
   console.log('✅ Normalized user data:', normalizedUser);
@@ -310,33 +347,36 @@ const normalizeUserData = (userData: any): User => {
   };
 
   const refreshUser = async (): Promise<User | undefined> => {
-    if (!token) return undefined;
+  if (!token) return undefined;
+  
+  try {
+    const response = await apiClient.get('/users/me');
     
-    try {
-      const response = await apiClient.get('/users/me');
+    // FIX: Use the same pattern as login function
+    const userData = response.data?.user || response.data;
+    
+    if (userData) {
+      const normalizedUser = normalizeUserData(userData);
+      setUser(normalizedUser);
+      localStorage.setItem('user', JSON.stringify(normalizedUser));
       
-      if (response.data && response.data.user) {
-        const normalizedUser = normalizeUserData(response.data.user);
-        setUser(normalizedUser);
-        localStorage.setItem('user', JSON.stringify(normalizedUser));
-        
-        // Clear verification progress if user is fully verified
-        if (isVerificationComplete(normalizedUser)) {
-          localStorage.removeItem('verificationProgress');
-          setVerificationProgress(null);
-        }
-        
-        return normalizedUser;
+      // Clear verification progress if user is fully verified
+      if (isVerificationComplete(normalizedUser)) {
+        localStorage.removeItem('verificationProgress');
+        setVerificationProgress(null);
       }
-      return undefined;
-    } catch (error: any) {
-      console.error('Error refreshing user:', error);
-      if (error.message === 'Authentication required') {
-        handleTokenExpiration();
-      }
-      throw error;
+      
+      return normalizedUser;
     }
-  };
+    return undefined;
+  } catch (error: any) {
+    console.error('Error refreshing user:', error);
+    if (error.message === 'Authentication required') {
+      handleTokenExpiration();
+    }
+    throw error;
+  }
+};
 
  // In AuthContext.tsx - Replace the loginWithOAuth method
 const loginWithOAuth = (provider: 'google') => {
@@ -508,7 +548,6 @@ const getNextRequiredStep = (user: User): string => {
   };
 
  //fixed
-// In AuthContext.tsx - Update the login method
 const login = async (emailOrToken: string, type: 'password' | 'oauth' = 'password', password?: string) => {
   try {
     let token: string;
@@ -548,59 +587,10 @@ const login = async (emailOrToken: string, type: 'password' | 'oauth' = 'passwor
     console.log('👤 Fetching user data...');
     const userResponse = await apiClient.get('/users/me');
     
-    // if (!userResponse.data?.user) {
-    //   throw new Error('No user data received after authentication');
-    // }
-
-    // // Only after successful user fetch, store everything
-    // console.log('✅ Setting token in storage');
-    // localStorage.setItem('token', token);
+    // FIX: Check both possible locations for user data
+    const userData = userResponse.user || userResponse;
     
-    // // Set token in state IMMEDIATELY
-    // setToken(token);
-
-    // console.log('✅ Token set, now fetching user data...');
-
-    // // Fetch user data after successful login
-    // try {
-    //   const userResponse = await apiClient.get('/users/me');
-    //   console.log('👤 User data response received');
-      
-    //   if (userResponse.data && userResponse.data.user) {
-    //     const normalizedUser = normalizeUserData(userResponse.data.user);
-        
-    //     // Set user in state and localStorage
-    //     setUser(normalizedUser);
-    //     localStorage.setItem('user', JSON.stringify(normalizedUser));
-
-    //     console.log('✅ Auth state updated with user:', normalizedUser.email);
-
-    //     // Navigate after user data is loaded
-    //     const nextStep = getNextRequiredStep(normalizedUser);
-    //     console.log('📍 Next step determined:', nextStep);
-        
-    //     // Use setTimeout to ensure navigation happens after state updates
-    //     setTimeout(() => {
-    //       navigateToNextStep(nextStep);
-    //     }, 100);
-
-    //   } else {
-    //     console.warn('⚠️ No user data received from /users/me');
-    //     setTimeout(() => {
-    //       toast.success('Login successful!');
-    //       navigate('/dashboard', { replace: true });
-    //     }, 100);
-    //   }
-    // } catch (userError: any) {
-    //   console.error('❌ Failed to fetch user data:', userError);
-    //   // Even if user fetch fails, proceed with login using token only
-    //   setTimeout(() => {
-    //     toast.success('Login successful!');
-    //     navigate('/dashboard', { replace: true });
-    //   }, 100);
-    // }
-
-    if (!userResponse.data?.user) {
+    if (!userData) {
       throw new Error('No user data received after authentication');
     }
 
@@ -609,7 +599,7 @@ const login = async (emailOrToken: string, type: 'password' | 'oauth' = 'passwor
     localStorage.setItem('token', token);
     setToken(token);
 
-    const normalizedUser = normalizeUserData(userResponse.data.user);
+    const normalizedUser = normalizeUserData(userData);
     setUser(normalizedUser);
     localStorage.setItem('user', JSON.stringify(normalizedUser));
 
@@ -623,6 +613,20 @@ const login = async (emailOrToken: string, type: 'password' | 'oauth' = 'passwor
       navigateToNextStep(nextStep);
     }, 100);
 
+    // Show a welcome notification for PWAs / installed apps (best-effort)
+    try {
+      // Dynamically import to avoid heavy modules when not needed
+      const notif = await import('../utils/notifications');
+      // Only show for dashboard/home landing
+      if (nextStep === 'dashboard' || nextStep === 'home' || nextStep === 'feed') {
+        notif.ensureAndNotify(`Welcome back, ${normalizedUser.name || 'User'}!`, {
+          body: 'Your personalized feed is ready.',
+          icon: '/icons/icon-192x192.png',
+        });
+      }
+    } catch (e) {
+      console.warn('Notification helper failed:', e);
+    }
 
   } catch (error: any) {
     console.error('❌ Login failed:', error);
@@ -683,6 +687,34 @@ const navigateToNextStep = (nextStep: string) => {
           const normalizedUser = normalizeUserData(responseData.user);
           localStorage.setItem('user', JSON.stringify(normalizedUser));
           setUser(normalizedUser);
+          
+          // Check for intended action after registration
+          const intendedAction = localStorage.getItem('intended_action');
+          if (intendedAction) {
+            try {
+              const action = JSON.parse(intendedAction);
+              localStorage.removeItem('intended_action'); // Clear after use
+              
+              // Handle different action types
+              if (action.type === 'contact_worker' && action.username) {
+                toast.success('Registration successful! Redirecting to contact worker...');
+                setTimeout(() => {
+                  navigate(`/@${action.username}`);
+                }, 1000);
+                return;
+              } else if (action.type === 'assign_worker' && action.username) {
+                toast.success('Registration successful! Redirecting to assign worker...');
+                setTimeout(() => {
+                  navigate('/dashboard/employer/post-job', { 
+                    state: { preselectedWorker: { username: action.username } } 
+                  });
+                }, 1000);
+                return;
+              }
+            } catch (e) {
+              console.warn('Failed to parse intended action:', e);
+            }
+          }
           
           // Start verification flow for new users
           if (getSafeBoolean(normalizedUser.email_verified)) {
@@ -820,7 +852,9 @@ const navigateToNextStep = (nextStep: string) => {
     checkVerificationStatus,
     getNextRequiredStep,
     loginWithOAuth,
-    authInitialized
+    authInitialized,
+    forgotPassword,
+    resetPassword
   };
 
   return (
