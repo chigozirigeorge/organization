@@ -28,7 +28,6 @@ import { SafetyGuidelines } from './components/Landingpage/SafetyGuidelines';
 import { Careers } from './components/Landingpage/Careers';
 import { PressKit } from './components/Landingpage/PressKit';
 import { Blog } from './components/Landingpage/Blog';
-import { KYCFlow } from './components/KYCFlow';
 import { ProfessionalKYCFlow } from './components/kyc/ProfessionalKYCFlow';
 import { RoleSelection } from './components/shared/RoleSelection';
 import { Settings } from './components/Settings';

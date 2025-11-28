@@ -150,7 +150,7 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
 
   return (
     <>
-      <nav className={`sticky top-0 z-50 transition-all duration-300 ${
+      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled 
           ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-border/50' 
           : 'bg-white/90 backdrop-blur-sm border-b border-border/30'
@@ -220,9 +220,11 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
                   {/* Subtle glow effect - adjusted for better merge */}
                   <div className="absolute inset-0 bg-gradient-to-r from-white/30 to-white/10 rounded-lg blur-xl -z-10"></div>
                 </div>
-                <span className="font-bold text-xl bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent hidden sm:block">
+                {!isAuthenticated && (
+                  <span className="font-bold text-xl bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent hidden sm:block">
                   VeriNest
                 </span>
+                )}
               </motion.div>
             </div>
 
