@@ -25,7 +25,7 @@ import {
   UserCheck, ShieldCheck, BarChart3, Building, ClipboardList, MessageSquare,
   DollarSign, Clock, Calendar, Award, Target, LucideIcon, HeadphonesIcon,
   Image as ImageIcon, MessageCircle, CheckCircle, BadgeCheck, CircleAlert,
-  Store
+  Store, Package
 } from 'lucide-react';
 import { RoleSelection } from '@/components/shared/RoleSelection'; 
 import { getWorkerDashboard } from '../services/labour';
@@ -48,6 +48,7 @@ import { MyServices } from '@/components/vendor/MyServices';
 import { ServiceDetails } from '@/components/vendor/ServiceDetails';
 import { PurchaseService } from '@/components/vendor/PurchaseService';
 import { VendorMarketplace } from '@/components/vendor/VendorMarketplace';
+import { WorkerJobProgress } from '@/components/worker/WorkerJobProgress'; 
 import SettingsDropdown from '@/components/shared/SettingsDropdown';
 
 // Define interfaces for better TypeScript support
@@ -77,6 +78,7 @@ const Dashboard = () => {
   const jobIdFromUrl = location.pathname.split('/jobs/')[1]?.split('/')[0];
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeStat, setActiveStat] = useState('Overview');
   const [dashboardStats, setDashboardStats] = useState({
     totalJobs: 0,
     activeContracts: 0,
@@ -462,6 +464,29 @@ const Dashboard = () => {
       return <ContractSign contractId={contractId} />;
     }
 
+    // Handle job progress route
+    if (location.pathname.includes('/dashboard/jobs/') && location.pathname.includes('/progress')) {
+      const pathSegments = location.pathname.split('/');
+      const jobId = pathSegments[3];
+      console.log('📈 Job progress route detected, jobId:', jobId);
+      
+      if (!jobId) {
+        console.error('❌ No jobId found in URL for progress update');
+        return (
+          <div className="text-center py-8">
+            <h2 className="text-2xl font-bold mb-4">Invalid Job</h2>
+            <p className="text-muted-foreground">No job ID provided for progress update.</p>
+            <Button onClick={() => navigate('/dashboard/my-jobs')}>
+              Back to My Jobs
+            </Button>
+          </div>
+        );
+      }
+
+      // Create a worker-specific job progress component
+      return <WorkerJobProgress jobId={jobId} />;
+    }
+
     if (activeSection === 'job-details') {
       const pathSegments = location.pathname.split('/');
       const jobIdFromUrl = pathSegments[3]; // Get jobId from URL
@@ -753,6 +778,146 @@ const Dashboard = () => {
   // Check if user is verified
   const isUserVerified = user?.kyc_verified === 'verified';
 
+  // Get dashboard stats based on user role
+  const getDashboardStats = (): DashboardStat[] => {
+    const baseStats: DashboardStat[] = [
+      {
+        id: 'overview',
+        label: 'Overview',
+        value: '📊',
+        icon: BarChart3,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-100',
+        description: 'Dashboard Overview'
+      }
+    ];
+
+    if (user.role === 'worker') {
+      return [
+        ...baseStats,
+        {
+          id: 'applications',
+          label: 'Applications',
+          value: dashboardStats.pendingApplications || 0,
+          icon: Briefcase,
+          color: 'text-green-600',
+          bgColor: 'bg-green-100',
+          description: 'Pending Applications'
+        },
+        {
+          id: 'contracts',
+          label: 'Active Jobs',
+          value: dashboardStats.activeContracts || 0,
+          icon: Clock,
+          color: 'text-orange-600',
+          bgColor: 'bg-orange-100',
+          description: 'Active Contracts'
+        },
+        {
+          id: 'earnings',
+          label: 'Earnings',
+          value: `₦${(dashboardStats.totalEarnings || 0).toLocaleString()}`,
+          icon: DollarSign,
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-100',
+          description: 'Total Earnings'
+        }
+      ];
+    }
+
+    if (user.role === 'employer') {
+      return [
+        ...baseStats,
+        {
+          id: 'jobs',
+          label: 'Posted Jobs',
+          value: dashboardStats.totalJobs || 0,
+          icon: Briefcase,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100',
+          description: 'Total Posted Jobs'
+        },
+        {
+          id: 'contracts',
+          label: 'Active Contracts',
+          value: dashboardStats.activeContracts || 0,
+          icon: FileText,
+          color: 'text-green-600',
+          bgColor: 'bg-green-100',
+          description: 'Active Contracts'
+        },
+        {
+          id: 'applications',
+          label: 'Applications',
+          value: dashboardStats.pendingApplications || 0,
+          icon: Users,
+          color: 'text-orange-600',
+          bgColor: 'bg-orange-100',
+          description: 'Pending Applications'
+        }
+      ];
+    }
+
+    if (user.role === 'admin' || user.role === 'verifier') {
+      return [
+        ...baseStats,
+        {
+          id: 'users',
+          label: 'Total Users',
+          value: dashboardStats.totalUsers || 0,
+          icon: Users,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100',
+          description: 'Platform Users'
+        },
+        {
+          id: 'jobs',
+          label: 'Total Jobs',
+          value: dashboardStats.totalJobs || 0,
+          icon: Briefcase,
+          color: 'text-green-600',
+          bgColor: 'bg-green-100',
+          description: 'Platform Jobs'
+        },
+        {
+          id: 'revenue',
+          label: 'Revenue',
+          value: `₦${(dashboardStats.platformRevenue || 0).toLocaleString()}`,
+          icon: DollarSign,
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-100',
+          description: 'Platform Revenue'
+        }
+      ];
+    }
+
+    if (user.role === 'vendor') {
+      return [
+        ...baseStats,
+        {
+          id: 'services',
+          label: 'Services',
+          value: '🛍️',
+          icon: Store,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100',
+          description: 'My Services'
+        },
+        {
+          id: 'orders',
+          label: 'Orders',
+          value: '📦',
+          icon: Package,
+          color: 'text-green-600',
+          bgColor: 'bg-green-100',
+          description: 'Customer Orders'
+        }
+      ];
+    }
+
+    return baseStats;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
       {/* Fixed Navbar with proper props */}
@@ -881,41 +1046,60 @@ const Dashboard = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 min-h-screen p-6 lg:p-8">
-          {/* Header Section */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                  Welcome back, {user.name}!
-                </h1>
-                <p className="text-slate-600 mt-2">
-                  {user.role === 'worker' && 'Ready to find your next opportunity?'}
-                  {user.role === 'employer' && 'Manage your workforce efficiently'}
-                  {user.role === 'verifier' && 'Review and verify user documents'}
-                  {user.role === 'admin' && 'Complete platform oversight and management'}
-                  {user.role === 'customer_care' && 'Help users with their inquiries and issues'}
-                </p>
+        <div className="flex-1 min-h-screen p-6 lg:p-8 pt-20">
+          {/* Only show welcome message on statistics page */}
+          {activeSection === 'statistics' && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                    Welcome back, {user.name}!
+                  </h1>
+                  <p className="text-slate-600 mt-2">
+                    {user.role === 'worker' && 'Ready to find your next opportunity?'}
+                    {user.role === 'employer' && 'Manage your workforce efficiently'}
+                    {user.role === 'verifier' && 'Review and verify user documents'}
+                    {user.role === 'admin' && 'Complete platform oversight and management'}
+                    {user.role === 'customer_care' && 'Provide excellent customer support'}
+                    {user.role === 'vendor' && 'Manage your services and products'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-sm text-slate-500">Account Status</p>
+                    <p className="font-semibold text-slate-800 capitalize">
+                      {user.subscription_tier === 'premium' ? 'Premium' : 'Free'}
+                    </p>
+                  </div>
+                  {isUserVerified && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-full">
+                      <ShieldCheck className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">Verified</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="capitalize">
-                  {user.role}
-                </Badge>
-                {/* Show verification status badge in header */}
-                {isUserVerified ? (
-                  <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
-                    <BadgeCheck className="h-3 w-3 mr-1" />
-                    Verified
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-amber-600 border-amber-300">
-                    <CircleAlert className="h-3 w-3 mr-1" />
-                    Not Verified
-                  </Badge>
-                )}
+
+              {/* Statistics Tabs - Only show on statistics page */}
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+                  {getDashboardStats().map((stat: DashboardStat, index: number) => (
+                    <button
+                      key={index}
+                      onClick={() => setActiveStat(stat.label)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeStat === stat.label
+                          ? 'bg-white text-primary shadow-sm'
+                          : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
+                      }`}
+                    >
+                      {stat.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Email Verification Alert */}
           {!user.email_verified && (
@@ -1010,44 +1194,6 @@ const Dashboard = () => {
             </Alert>
           )}
 
-          {/* Enhanced Stats Grid */}
-          {roleStats.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {roleStats.map((stat, index) => (
-                <Card 
-                  key={index} 
-                  className="border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden group cursor-pointer"
-                  onClick={() => stat.id && handleNavigation(stat.id)}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-600 mb-1">
-                          {stat.label}
-                        </p>
-                        <p className="text-2xl font-bold text-slate-800">
-                          {stat.value}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {stat.description}
-                        </p>
-                      </div>
-                      <div className={`p-3 rounded-xl ${stat.bgColor} group-hover:scale-110 transition-transform duration-200`}>
-                        <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                    </div>
-                    {/* Progress bar for visual appeal */}
-                    <div className="mt-4 w-full bg-slate-200 rounded-full h-1">
-                      <div 
-                        className={`h-1 rounded-full ${stat.bgColor} transition-all duration-1000`}
-                        style={{ width: '85%' }}
-                      ></div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
 
           {/* Welcome Message for New Users */}
           {!user.role && activeSection === 'home' && (
@@ -1084,7 +1230,7 @@ const Dashboard = () => {
           )}
 
           {/* Active Section Content */}
-          <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border mt-5 -mx-4 px-3 py-3 border-slate-200/60 shadow-sm overflow-hidden">
             {renderActiveSection()}
           </div>
         </div>

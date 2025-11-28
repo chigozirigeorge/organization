@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,11 +10,12 @@ import { Checkbox } from '../components/ui/checkbox';
 import logo from '../assets/verinest.png';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { CheckCircle, ExternalLink, ArrowLeft, Mail, User, Lock, Shield, Eye, EyeOff, Sparkles, Zap, Crown } from 'lucide-react';
+import { CheckCircle, ExternalLink, ArrowLeft, Mail, User, Lock, Shield, Eye, EyeOff, Sparkles, Zap, Crown, Loader2, X, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { PrivacyPolicy } from '../components/Landingpage/PrivacyPolicy';
 import { TermsAndConditions } from '../components/Landingpage/TermsAndConditions';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiClient } from '../utils/api';
 
 const Register = () => {
   const { register, loginWithOAuth } = useAuth();
@@ -41,6 +42,71 @@ const Register = () => {
   const [selectedRole, setSelectedRole] = useState<'worker' | 'employer' | 'vendor' | null>(null);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Username validation states
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
+
+  // Username availability check
+  const checkUsernameAvailability = async (username: string) => {
+    if (username.length < 3) {
+      setUsernameAvailable(null);
+      setUsernameError('');
+      return;
+    }
+
+    // Only allow letters, numbers, underscores, and hyphens
+    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!usernameRegex.test(username)) {
+      setUsernameAvailable(false);
+      setUsernameError('Username can only contain letters, numbers, underscores, and hyphens');
+      return;
+    }
+
+    setCheckingUsername(true);
+    setUsernameError('');
+
+    try {
+      // Use fetch directly instead of apiClient to avoid authentication middleware
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.verinest.xyz'}/auth/check-username?username=${encodeURIComponent(username)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to check username availability');
+      }
+
+      const data = await response.json();
+      setUsernameAvailable(data.available);
+      if (!data.available) {
+        setUsernameError(data.message || 'This username is already taken');
+      }
+    } catch (error) {
+      console.error('Error checking username:', error);
+      setUsernameAvailable(null);
+      setUsernameError('Unable to check username availability');
+    } finally {
+      setCheckingUsername(false);
+    }
+  };
+
+  // Debounced username check
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.username) {
+        checkUsernameAvailability(formData.username);
+      } else {
+        setUsernameAvailable(null);
+        setUsernameError('');
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.username]);
 
   // Enhanced OAuth handlers with role selection
   const handleOAuthLogin = async (provider: 'google' | 'twitter') => {
@@ -109,34 +175,43 @@ const Register = () => {
       toast.error('Please select your role');
       return;
     }
+
+    // Username validation
+    if (formData.username.length < 3) {
+      toast.error('Username must be at least 3 characters long');
+      return;
+    }
+
+    if (usernameAvailable === false) {
+      toast.error('Username is already taken. Please choose another one.');
+      return;
+    }
+
+    if (usernameAvailable === null && formData.username.length >= 3) {
+      toast.error('Please wait for username availability check to complete');
+      return;
+    }
     
     setLoading(true);
     try {
       // Store role in sessionStorage for post-registration redirect
-      sessionStorage.setItem('selectedRole', formData.role);
+      sessionStorage.setItem('selected_role', formData.role);
       
-      const cleanData = {
-        ...formData,
-        referral_code: formData.referral_code.trim() !== '' ? formData.referral_code : undefined
-      };
+      await register({
+        name: formData.name,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        passwordConfirm: formData.passwordConfirm,
+        referral_code: formData.referral_code,
+        role: formData.role,
+      });
       
-      try {
-        await register(cleanData);
-        setRegistered(true);
-      } catch (error: any) {
-        console.error('Registration error:', error);
-        
-        // Check if this is a duplicate email error
-        if (error.message?.toLowerCase().includes('email already registered')) {
-          // Treat this as a successful registration since the user exists
-          toast.info('Account already exists! Please check your email for verification link.');
-          setRegistered(true);
-          return;
-        }
-        
-        // For other errors, show the error message
-        toast.error(error.message || 'Registration failed. Please try again.');
-      }
+      setRegistered(true);
+      toast.success('Registration successful! Please check your email to verify your account.');
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      toast.error(error.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -517,7 +592,15 @@ const Register = () => {
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="username" className="text-sm font-medium text-slate-700">Username</Label>
+                              <Label htmlFor="username" className="text-sm font-medium text-slate-700">
+                                Username
+                                {usernameAvailable === true && (
+                                  <span className="ml-2 text-green-600 text-xs flex items-center gap-1">
+                                    <Check className="w-3 h-3" />
+                                    Available
+                                  </span>
+                                )}
+                              </Label>
                               <div className="relative">
                                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
                                 <Input
@@ -527,9 +610,33 @@ const Register = () => {
                                   value={formData.username}
                                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                                   placeholder="Choose a username"
-                                  className="pl-10 h-11 border-slate-200 focus:border-primary"
+                                  className={`pl-10 pr-10 h-11 border-slate-200 focus:border-primary ${
+                                    usernameAvailable === false ? 'border-red-500 focus:border-red-500' : 
+                                    usernameAvailable === true ? 'border-green-500 focus:border-green-500' : 
+                                    ''
+                                  }`}
                                 />
+                                {checkingUsername && (
+                                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 animate-spin" />
+                                )}
+                                {usernameAvailable === true && !checkingUsername && (
+                                  <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500 w-4 h-4" />
+                                )}
+                                {usernameAvailable === false && !checkingUsername && (
+                                  <X className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500 w-4 h-4" />
+                                )}
                               </div>
+                              {usernameError && (
+                                <p className="text-xs text-red-600 flex items-center gap-1">
+                                  <X className="w-3 h-3" />
+                                  {usernameError}
+                                </p>
+                              )}
+                              {formData.username && formData.username.length < 3 && (
+                                <p className="text-xs text-slate-500">
+                                  Username must be at least 3 characters long
+                                </p>
+                              )}
                             </div>
 
                             <div className="space-y-2">

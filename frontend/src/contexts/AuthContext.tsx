@@ -86,6 +86,7 @@ interface RegisterData {
   password: string;
   passwordConfirm: string;
   referral_code?: string;
+  role: string;
 }
 
 interface VerificationProgress {
