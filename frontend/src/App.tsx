@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedLayout } from './components/shared/ProtectedLayout';
+import { Button } from './components/ui/button';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -33,6 +34,7 @@ import { RoleSelection } from './components/shared/RoleSelection';
 import { Settings } from './components/Settings';
 import { TransactionsPage } from './components/shared/TransactionsPage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
+import { PublicRoute } from './components/shared/PublicRoute';
 import { AdminDashboard } from './components/admins/AdminDashboard';
 import { VerifierDashboard } from './components/admins/VerifierDashboard';
 import { WorkerPortfolio } from './components/worker/WorkerPortfolio';
@@ -42,6 +44,8 @@ import OAuthRedirect from './pages/OAuthRedirect';
 import NavigationManager from './components/NavigationManager';
 import { TokenHandler } from './components/shared/TokenHandler';
 import PublicWorkerProfile from './pages/PublicWorkerProfile';
+import { NotFoundPage } from './components/shared/NotFoundPage';
+import { NotFoundLayout } from './components/shared/NotFoundLayout';
 
 // Main App Routes - All protected routes now go through Dashboard
 const AppRoutes = () => {
@@ -59,11 +63,19 @@ const AppRoutes = () => {
     <Routes>
       {/* Public Routes - No authentication required */}
       <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={
+        <PublicRoute>
+          <Login />
+        </PublicRoute>
+      } />
       <Route path="/oauth-callback" element={<OAuthCallback />} />
       <Route path="/oauth-redirect" element={<OAuthRedirect />} />
       <Route path="/auth/callback" element={<TokenHandler />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={
+        <PublicRoute>
+          <Register />
+        </PublicRoute>
+      } />
       <Route path="/verify-email" element={<EmailVerification />} />
       <Route path="/payment/verify" element={<PaymentVerification />} />
       <Route path="/payment/success" element={<PaymentSuccess />} />
@@ -81,6 +93,7 @@ const AppRoutes = () => {
       
       {/* Public Worker Profile - Username-based URLs */}
       <Route path="/@:username" element={<PublicWorkerProfile />} />
+      <Route path="/profile/:username" element={<PublicWorkerProfile />} />
       
       {/* KYC Verification Flow */}
       <Route path="/verify/kyc" element={
@@ -103,8 +116,11 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
 
-      {/* Catch all route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Catch-all for direct username URLs (must be before 404) */}
+      <Route path="/:username" element={<PublicWorkerProfile />} />
+
+      {/* 404 Page */}
+      <Route path="*" element={<NotFoundLayout />} />
     </Routes>
   );
 };
