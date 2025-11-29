@@ -35,6 +35,7 @@ import { Settings } from './components/Settings';
 import { TransactionsPage } from './components/shared/TransactionsPage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 import { PublicRoute } from './components/shared/PublicRoute';
+import { UsernameRoute } from './components/shared/UsernameRoute';
 import { AdminDashboard } from './components/admins/AdminDashboard';
 import { VerifierDashboard } from './components/admins/VerifierDashboard';
 import { WorkerPortfolio } from './components/worker/WorkerPortfolio';
@@ -118,7 +119,7 @@ const AppRoutes = () => {
       } />
 
       {/* Catch-all for direct username URLs (must be before 404) */}
-      <Route path="/:username" element={<PublicWorkerProfile />} />
+      <Route path="/:username" element={<UsernameRoute />} />
 
       {/* 404 Page */}
       <Route path="*" element={<NotFoundLayout />} />

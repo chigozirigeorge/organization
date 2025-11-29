@@ -1,16 +1,47 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 interface StaticFileHandlerProps {
   fileName: string;
 }
 
 export const StaticFileHandler = ({ fileName }: StaticFileHandlerProps) => {
-  const navigate = useNavigate();
-
   useEffect(() => {
-    // Redirect to the actual static file in the public folder
-    window.location.href = `/${fileName}`;
+    // For static files, we need to serve them directly without React Router interference
+    // Check if we're in a browser environment
+    if (typeof window !== 'undefined') {
+      // Get the current domain and construct the full URL
+      const baseUrl = window.location.origin;
+      const staticFileUrl = `${baseUrl}/${fileName}`;
+      
+      // For XML files and other static content, we need to fetch and display them
+      fetch(staticFileUrl)
+        .then(response => {
+          if (response.ok) {
+            // Get the content type
+            const contentType = response.headers.get('content-type');
+            
+            // For XML files, display as XML
+            if (contentType?.includes('xml') || fileName.endsWith('.xml')) {
+              return response.text().then(text => {
+                // Create a new document with the XML content
+                const newDoc = document.open('text/xml', '_self');
+                newDoc.write(text);
+                newDoc.close();
+              });
+            }
+            
+            // For other files, redirect to them
+            window.location.href = staticFileUrl;
+          } else {
+            // If file doesn't exist, show 404
+            window.location.href = '/404';
+          }
+        })
+        .catch(error => {
+          console.error('Error loading static file:', error);
+          window.location.href = '/404';
+        });
+    }
   }, [fileName]);
 
   return (
