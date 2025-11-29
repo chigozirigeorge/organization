@@ -87,12 +87,12 @@ export const AccountSettings = ({ isOpen, onClose }: AccountSettingsProps) => {
     try {
       // Use the real backend endpoint
       const res = await apiClient.get('/users/subscription/premium');
-      const data = res.data; // Direct access, not nested
+      const data = res.data || res; // Handle both response formats
       
       setSubscription({
-        tier: data.user_tier || 'free',
+        tier: data.user_tier || data.tier || 'free',
         status: 'active',
-        expires_at: data.active_subscription?.expires_at || null
+        expires_at: data.active_subscription?.expires_at || data.expires_at || null
       });
     } catch (err) {
       console.error("Failed to fetch subscription status:", err);

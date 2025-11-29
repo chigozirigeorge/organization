@@ -122,12 +122,17 @@ class ApiClient {
     });
   }
 
-  async postFormData(endpoint: string, formData: FormData) {
+  async postFormData(endpoint: string, data: FormData | Record<string, any>) {
+    // Handle both FormData and regular objects
+    const isFormData = data instanceof FormData;
+    
     return this.request(endpoint, {
       method: 'POST',
-      body: formData,
-      headers: {
+      body: isFormData ? data : JSON.stringify(data),
+      headers: isFormData ? {
         'Content-Type': 'multipart/form-data',
+      } : {
+        'Content-Type': 'application/json',
       },
     });
   }

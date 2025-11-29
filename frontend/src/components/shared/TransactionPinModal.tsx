@@ -13,7 +13,7 @@ interface TransactionPinModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVerify: (pin: string) => void;
-  transactionType: 'transfer' | 'withdrawal' | 'payment' | 'contract_sign';
+  transactionType: 'transfer' | 'withdrawal' | 'payment' | 'contract_sign' | 'role_upgrade';
   transactionData?: any;
   amount: number;
 }

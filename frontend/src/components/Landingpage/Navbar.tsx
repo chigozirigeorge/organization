@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { toast } from 'sonner';
 import { apiClient } from '../../utils/api';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 interface NavbarProps {
   onMenuToggle?: () => void;
@@ -134,10 +135,14 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
 
     setUploadingPhoto(true);
     try {
-      const formData = new FormData();
-      formData.append('avatar', file);
-
-      const response = await apiClient.postFormData('/users/upload-avatar', formData);
+      // Step 1: Upload to Cloudinary
+      const cloudinaryResponse = await uploadToCloudinary(file);
+      
+      // Step 2: Send the Cloudinary URL to backend
+      const response = await apiClient.postFormData('/users/upload-avatar', {
+        avatar_url: cloudinaryResponse.secure_url,
+        public_id: cloudinaryResponse.public_id,
+      });
 
       toast.success('Profile photo updated successfully!');
       await refreshUser(); // Refresh user data to get new avatar URL
