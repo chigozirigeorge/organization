@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../../utils/api';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 const PUBLIC_BASE_URL = import.meta.env.VITE_PUBLIC_URL || "https://verinest.xyz";
 
@@ -166,10 +167,14 @@ export const ProfileSettings = ({ isOpen, onClose }: ProfileSettingsProps) => {
 
     setUploadingPhoto(true);
     try {
-      const formData = new FormData();
-      formData.append('avatar', file);
-
-      const response = await apiClient.postFormData('/users/upload-avatar', formData);
+      // Step 1: Upload to Cloudinary
+      const cloudinaryResponse = await uploadToCloudinary(file);
+      
+      // Step 2: Send the Cloudinary URL to backend
+      const response = await apiClient.postFormData('/api/users/upload-avatar', {
+        avatar_url: cloudinaryResponse.secure_url,
+        public_id: cloudinaryResponse.public_id,
+      });
 
       toast.success('Profile photo updated successfully!');
       await refreshUser(); // Refresh user data to get new avatar URL

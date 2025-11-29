@@ -46,6 +46,7 @@ import { TokenHandler } from './components/shared/TokenHandler';
 import PublicWorkerProfile from './pages/PublicWorkerProfile';
 import { NotFoundPage } from './components/shared/NotFoundPage';
 import { NotFoundLayout } from './components/shared/NotFoundLayout';
+import { StaticFileHandler } from './components/shared/StaticFileHandler';
 
 // Main App Routes - All protected routes now go through Dashboard
 const AppRoutes = () => {
@@ -115,6 +116,12 @@ const AppRoutes = () => {
           <Dashboard />
         </ProtectedRoute>
       } />
+
+      {/* Static files - Must be before username route */}
+      <Route path="/sitemap.xml" element={<StaticFileHandler fileName="sitemap.xml" />} />
+      <Route path="/robots.txt" element={<StaticFileHandler fileName="robots.txt" />} />
+      <Route path="/manifest.json" element={<StaticFileHandler fileName="manifest.json" />} />
+      <Route path="/favicon.ico" element={<StaticFileHandler fileName="favicon.ico" />} />
 
       {/* Catch-all for direct username URLs (must be before 404) */}
       <Route path="/:username" element={<PublicWorkerProfile />} />
