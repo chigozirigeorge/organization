@@ -1,8 +1,8 @@
 // components/Navbar.tsx (Professional Revamp)
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { Menu, LogOut, User, Shield, Briefcase, Building, X, ChevronDown, Star, CheckCircle, ArrowRight, Users, Wrench, Home, FileText, CreditCard, HelpCircle, Settings, Hammer, PaintBucket, Zap } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Menu, LogOut, User, Shield, Briefcase, Building, X, ChevronDown, Star, CheckCircle, ArrowRight, Users, Wrench, Home, FileText, CreditCard, HelpCircle, Settings, Hammer, PaintBucket, Zap, Camera, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import logo from '../../assets/verinest.png';
 import { NotificationCenter } from '../shared/NotificationCenter';
@@ -15,6 +15,9 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
+import { toast } from 'sonner';
+import { apiClient } from '../../utils/api';
 
 interface NavbarProps {
   onMenuToggle?: () => void;
@@ -24,7 +27,9 @@ interface NavbarProps {
 export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { isAuthenticated, user, logout } = useAuth();
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isAuthenticated, user, logout, refreshUser } = useAuth();
 
   // Handle scroll effect for navbar
   useEffect(() => {
@@ -110,6 +115,46 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
 
   const closeMobileMenu = () => {
     setIsMobileMenuOpen(false);
+  };
+
+  const handleProfilePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await apiClient.postFormData('/users/upload-avatar', formData);
+
+      toast.success('Profile photo updated successfully!');
+      await refreshUser(); // Refresh user data to get new avatar URL
+    } catch (error: any) {
+      console.error('Error uploading profile photo:', error);
+      toast.error(error.message || 'Failed to upload profile photo');
+    } finally {
+      setUploadingPhoto(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
   };
 
   // Get role icon
@@ -386,16 +431,54 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
                     <NotificationCenter />
                   </motion.div>
                   
-                  {/* Professional User Avatar with Dropdown */}
+                  {/* Professional User Avatar with Upload - Separate from Dropdown */}
+                  <div className="relative group">
+                    <div className="relative">
+                      <Avatar className="h-11 w-11 cursor-pointer" onClick={triggerFileInput}>
+                        <AvatarImage 
+                          src={user?.avatar_url} 
+                          alt={user?.name || 'Profile'}
+                          onError={(e) => {
+                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=6366f1&color=fff&size=44`;
+                          }}
+                        />
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-sm">
+                          {user?.name?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      
+                      {/* Upload button overlay */}
+                      <div 
+                        className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        onClick={triggerFileInput}
+                      >
+                        {uploadingPhoto ? (
+                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                        ) : (
+                          <Camera className="h-4 w-4 text-white" />
+                        )}
+                      </div>
+                      
+                      {/* Online status indicator */}
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                      
+                      {/* Hidden file input */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProfilePhotoUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown Menu - Separate from Avatar */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                        <Button variant="ghost" className="relative h-11 w-11 rounded-full p-0 hover:bg-slate-100 transition-all duration-200 shadow-sm">
-                          <div className="flex items-center justify-center h-11 w-11 rounded-full bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-sm shadow-md ring-2 ring-white/50">
-                            {user?.name?.charAt(0).toUpperCase() || 'U'}
-                          </div>
-                          {/* Online status indicator */}
-                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                        <Button variant="ghost" className="h-8 w-8 p-0 rounded-full hover:bg-slate-100">
+                          <ChevronDown className="h-4 w-4" />
                         </Button>
                       </motion.div>
                     </DropdownMenuTrigger>
@@ -403,9 +486,18 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
                       <DropdownMenuLabel className="pb-3">
                         <div className="flex flex-col space-y-2">
                           <div className="flex items-center space-x-3">
-                            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-sm shadow-md">
-                              {user?.name?.charAt(0).toUpperCase() || 'U'}
-                            </div>
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage 
+                                src={user?.avatar_url} 
+                                alt={user?.name || 'Profile'}
+                                onError={(e) => {
+                                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=6366f1&color=fff&size=40`;
+                                }}
+                              />
+                              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-sm">
+                                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                              </AvatarFallback>
+                            </Avatar>
                             <div className="flex-1">
                               <p className="text-sm font-semibold text-slate-800">{user?.name}</p>
                               <p className="text-xs text-slate-500">@{user?.username}</p>
@@ -496,18 +588,45 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
                   <NotificationCenter />
                 </motion.div>
                 
-                {/* Mobile User Avatar */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                      <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
-                        <div className="flex items-center justify-center h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-xs shadow-md ring-2 ring-white/50">
-                          {user?.name?.charAt(0).toUpperCase() || 'U'}
-                        </div>
-                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>
-                      </Button>
-                    </motion.div>
-                  </DropdownMenuTrigger>
+                {/* Mobile User Avatar with Upload - Separate from Dropdown */}
+                <div className="flex items-center gap-2">
+                  <div className="relative group">
+                    <Avatar className="h-10 w-10 cursor-pointer" onClick={triggerFileInput}>
+                      <AvatarImage 
+                        src={user?.avatar_url} 
+                        alt={user?.name || 'Profile'}
+                        onError={(e) => {
+                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=6366f1&color=fff&size=40`;
+                        }}
+                      />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-white font-semibold text-xs">
+                        {user?.name?.charAt(0).toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    
+                    {/* Upload button overlay */}
+                    <div 
+                      className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      onClick={triggerFileInput}
+                    >
+                      {uploadingPhoto ? (
+                        <Loader2 className="h-3 w-3 text-white animate-spin" />
+                      ) : (
+                        <Camera className="h-3 w-3 text-white" />
+                      )}
+                    </div>
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>
+                  </div>
+
+                  {/* Mobile Dropdown Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button variant="ghost" className="h-8 w-8 p-0 rounded-full">
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </motion.div>
+                    </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56 shadow-lg border-0" align="end">
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
@@ -544,6 +663,7 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </div>
               </div>
             )}
           </div>

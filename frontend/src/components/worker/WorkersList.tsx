@@ -5,9 +5,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { MapPin, Star, Briefcase, Calendar, MessageCircle } from 'lucide-react';
+import { MapPin, Star, Briefcase, Calendar, MessageCircle, Search, User } from 'lucide-react';
 import { nigeriaStates } from '../../lib/states';
 import { toast } from 'sonner';
+import { Input } from '../ui/input';
 
 // Available categories from API
 const CATEGORIES = [
@@ -87,13 +88,29 @@ export const WorkersList = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedState, setSelectedState] = useState(nigeriaStates[0]?.state || '');
+  const [usernameSearch, setUsernameSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) {
       fetchWorkers();
     }
-  }, [selectedCategory, selectedState, token]);
+  }, [selectedCategory, selectedState, usernameSearch, token]);
+
+  const handleUsernameSearch = () => {
+    if (usernameSearch.trim()) {
+      // Navigate directly to the worker's profile if username is provided
+      navigate(`/${usernameSearch.trim()}`);
+    } else {
+      toast.error('Please enter a username to search');
+    }
+  };
+
+  const handleUsernameKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleUsernameSearch();
+    }
+  };
 
   const handleViewProfile = (username?: string, workerUserId?: string) => {
     const slug = username || workerUserId;
@@ -242,6 +259,32 @@ export const WorkersList = () => {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4 p-4 bg-gray-50 rounded-lg">
+        {/* Username Search */}
+        <div className="w-full md:w-64">
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="Search by username..."
+              value={usernameSearch}
+              onChange={(e) => setUsernameSearch(e.target.value)}
+              onKeyPress={handleUsernameKeyPress}
+              className="pl-10 pr-10"
+            />
+            <Button
+              size="sm"
+              onClick={handleUsernameSearch}
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+              variant="ghost"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Enter a username to view their profile directly
+          </p>
+        </div>
+
         <div className="w-full md:w-64">
           <select
             className="w-full p-2 border rounded-lg"

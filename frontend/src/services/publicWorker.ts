@@ -25,12 +25,11 @@ export interface PublicWorkerProfile {
 
 export interface PortfolioItem {
   id: string;
-  worker_profile_id: string;
   title: string;
   description: string;
-  images: string[];
-  completion_date: string;
-  created_at: string;
+  image_url?: string; // Single image URL from API
+  project_date?: string; // Changed from completion_date
+  created_at?: string;
 }
 
 export interface Review {
@@ -46,8 +45,18 @@ export interface Review {
   created_at: string;
 }
 
+export interface PublicWorkerUser {
+  id: string;
+  name: string;
+  username: string;
+  avatar_url?: string;
+  verified: boolean;
+  trust_score?: number;
+}
+
 export interface PublicWorkerPortfolioResponse {
   profile: PublicWorkerProfile;
+  user: PublicWorkerUser;
   portfolio: PortfolioItem[];
   reviews: Review[];
   stats: {
@@ -73,16 +82,15 @@ export class PublicWorkerService {
 
   // Get complete public worker data (profile + portfolio + reviews)
   static async getCompleteWorkerProfile(username: string): Promise<PublicWorkerPortfolioResponse> {
-    const [profileResponse, portfolioResponse] = await Promise.all([
-      this.getWorkerProfileByUsername(username),
-      this.getWorkerPortfolioByUsername(username),
-    ]);
-
+    const response = await apiClient.get(`/labour/profile/${username}`);
+    const data = response.data || response;
+    
     return {
-      profile: profileResponse.profile || profileResponse,
-      portfolio: portfolioResponse.portfolio || portfolioResponse.items || [],
-      reviews: portfolioResponse.reviews || [],
-      stats: portfolioResponse.stats || {
+      profile: data.profile || data,
+      user: data.user || {},
+      portfolio: data.portfolio || data.items || [],
+      reviews: data.reviews || [],
+      stats: data.stats || {
         total_jobs: 0,
         completion_rate: 0,
         average_rating: 0,

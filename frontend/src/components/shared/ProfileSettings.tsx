@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,6 +7,7 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Alert, AlertDescription } from '../ui/alert';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { 
   UserCircle, 
   Mail, 
@@ -24,12 +25,14 @@ import {
   AlertCircle,
   Edit2,
   Save,
-  Loader2
+  Loader2,
+  Camera,
+  Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../../utils/api';
 
-const PUBLIC_BASE_URL = import.meta.env.VITE_PUBLIC_URL || "https://verinest.com";
+const PUBLIC_BASE_URL = import.meta.env.VITE_PUBLIC_URL || "https://verinest.xyz";
 
 interface ProfileSettingsProps {
   isOpen: boolean;
@@ -40,6 +43,8 @@ export const ProfileSettings = ({ isOpen, onClose }: ProfileSettingsProps) => {
   const { user, token, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -144,6 +149,46 @@ export const ProfileSettings = ({ isOpen, onClose }: ProfileSettingsProps) => {
     }
   };
 
+  const handleProfilePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await apiClient.postFormData('/users/upload-avatar', formData);
+
+      toast.success('Profile photo updated successfully!');
+      await refreshUser(); // Refresh user data to get new avatar URL
+    } catch (error: any) {
+      console.error('Error uploading profile photo:', error);
+      toast.error(error.message || 'Failed to upload profile photo');
+    } finally {
+      setUploadingPhoto(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
   const getVerificationBadge = () => {
     const status = user?.kyc_verified;
     switch (status) {
@@ -191,9 +236,42 @@ export const ProfileSettings = ({ isOpen, onClose }: ProfileSettingsProps) => {
             <CardContent className="space-y-4">
               {/* Avatar and Basic Info */}
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg">
-                  {user?.name?.charAt(0).toUpperCase()}
+                <div className="relative group">
+                  <Avatar className="w-20 h-20">
+                    <AvatarImage 
+                      src={user?.avatar_url} 
+                      alt={user?.name || 'Profile'}
+                      onError={(e) => {
+                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=6366f1&color=fff&size=80`;
+                      }}
+                    />
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-white font-bold text-2xl">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  {/* Upload button overlay */}
+                  <div 
+                    className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    onClick={triggerFileInput}
+                  >
+                    {uploadingPhoto ? (
+                      <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    ) : (
+                      <Camera className="h-6 w-6 text-white" />
+                    )}
+                  </div>
+                  
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfilePhotoUpload}
+                    className="hidden"
+                  />
                 </div>
+                
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-xl font-semibold">{user?.name}</h3>
@@ -210,6 +288,9 @@ export const ProfileSettings = ({ isOpen, onClose }: ProfileSettingsProps) => {
                       Trust Score: {user?.trust_score || 0}
                     </span>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Click on your photo to update it
+                  </p>
                 </div>
               </div>
 

@@ -64,7 +64,9 @@ export const JobProgress = () => {
 
   const fetchJobProgressLocal = async (jobId: string) => {
     try {
+      console.log('Fetching progress for job:', jobId);
       const data = await fetchJobProgress(jobId);
+      console.log('Progress data received:', data);
       setJobProgress(data || []);
     } catch (err: any) {
       console.error('Failed to fetch job progress via service:', err);
@@ -125,8 +127,12 @@ export const JobProgress = () => {
 
       // Success
       toast.success('Progress updated successfully!');
-      setProgressData({ progress_percentage: '', description: '', image_urls: [] });
-      fetchJobProgressLocal(selectedJob);
+      // Don't reset the form immediately, just refresh the progress data
+      await fetchJobProgressLocal(selectedJob);
+      // Then reset the form after a short delay to show the success
+      setTimeout(() => {
+        setProgressData({ progress_percentage: '', description: '', image_urls: [] });
+      }, 1000);
     } catch (error: any) {
       console.error('Failed to submit progress (network):', error);
       toast.error(error?.message || 'Failed to update progress');

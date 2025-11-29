@@ -122,6 +122,16 @@ class ApiClient {
     });
   }
 
+  async postFormData(endpoint: string, formData: FormData) {
+    return this.request(endpoint, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
+
   async put(endpoint: string, data?: any) {
     return this.request(endpoint, {
       method: 'PUT',
