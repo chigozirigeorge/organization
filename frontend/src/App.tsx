@@ -117,12 +117,6 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
 
-      {/* Static files - Must be before username route */}
-      <Route path="/sitemap.xml" element={<StaticFileHandler fileName="sitemap.xml" />} />
-      <Route path="/robots.txt" element={<StaticFileHandler fileName="robots.txt" />} />
-      <Route path="/manifest.json" element={<StaticFileHandler fileName="manifest.json" />} />
-      <Route path="/favicon.ico" element={<StaticFileHandler fileName="favicon.ico" />} />
-
       {/* Catch-all for direct username URLs (must be before 404) */}
       <Route path="/:username" element={<PublicWorkerProfile />} />
 
