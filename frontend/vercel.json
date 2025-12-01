@@ -4,28 +4,32 @@
       "src": "^/sitemap\\.xml$",
       "dest": "/sitemap.xml",
       "headers": {
-        "Content-Type": "application/xml"
+        "Content-Type": "application/xml",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
       }
     },
     {
       "src": "^/robots\\.txt$",
       "dest": "/robots.txt",
       "headers": {
-        "Content-Type": "text/plain"
+        "Content-Type": "text/plain",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
       }
     },
     {
       "src": "^/manifest\\.json$",
       "dest": "/manifest.json",
       "headers": {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
       }
     },
     {
       "src": "^/favicon\\.ico$",
       "dest": "/favicon.ico",
       "headers": {
-        "Content-Type": "image/x-icon"
+        "Content-Type": "image/x-icon",
+        "Cache-Control": "public, max-age=86400"
       }
     }
   ]

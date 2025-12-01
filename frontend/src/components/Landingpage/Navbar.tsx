@@ -135,16 +135,14 @@ export const Navbar = ({ onMenuToggle, sidebarOpen }: NavbarProps) => {
 
     setUploadingPhoto(true);
     try {
-      let uploadResponse;
+      // Step 1: Upload to Cloudinary
+      const cloudinaryResponse = await uploadToCloudinary(file);
       
-      // Try Cloudinary first, fallback to backend if not configured
-      try {
-        uploadResponse = await uploadToCloudinary(file);
-      } catch (cloudinaryError) {
-        console.warn('Cloudinary upload failed, trying backend:', cloudinaryError);
-        uploadResponse = await uploadToBackend(file);
-      }
-      
+      // Step 2: Send the Cloudinary URL to backend using correct endpoint
+      const response = await apiClient.put('/users/avatar', {
+        avatar_url: cloudinaryResponse.secure_url
+      });
+
       toast.success('Profile photo updated successfully!');
       await refreshUser(); // Refresh user data to get new avatar URL
     } catch (error: any) {
