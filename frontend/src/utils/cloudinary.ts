@@ -6,26 +6,20 @@ interface CloudinaryUploadResponse {
 }
 
 export const uploadToCloudinary = async (file: File): Promise<CloudinaryUploadResponse> => {
-  // Cloudinary configuration - replace with your actual credentials
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'demo';
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+  // Cloudinary configuration - use your actual credentials
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = 'verinest_portfolio'; // Use your portfolio preset for avatars
+  const folder = 'verinest/avatars'; // Create avatars folder
   
-  // For demo purposes, if no cloud name is provided, we'll use a mock upload
-  if (!cloudName || cloudName === 'demo') {
-    console.warn('Cloudinary not configured. Using mock upload for development.');
-    // Mock upload - return a placeholder URL
-    return {
-      secure_url: `https://ui-avatars.com/api/?name=${file.name.split('.')[0]}&background=6366f1&color=fff&size=200`,
-      public_id: `mock_${Date.now()}`,
-      format: 'png',
-      bytes: file.size,
-    };
+  if (!cloudName) {
+    console.error('Cloudinary cloud name not configured');
+    throw new Error('Cloudinary not properly configured');
   }
   
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', uploadPreset);
-  formData.append('folder', 'verinest/avatars');
+  formData.append('folder', folder);
   
   try {
     const response = await fetch(
