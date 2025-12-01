@@ -16,7 +16,7 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://verinestorg.vercel.app/sitemap.xml
+Sitemap: https://verinest.xyz/sitemap.xml
 
 # Disallow admin pages or private endpoints
 Disallow: /dashboard/
